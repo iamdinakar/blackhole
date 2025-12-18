@@ -57,7 +57,7 @@
 
   <button id="toggleUI" class="pill">Hide UI</button>
   <div id="ui">
-    <h1>Cinematic Golden Black Hole</h1>
+    <h1>Cinematic Black Hole</h1>
 
     <div class="row">
       <button id="play">Pause</button>
@@ -80,7 +80,6 @@
 
     <div class="row">
       <label>Mass <input id="mass" type="range" min="0.14" max="0.34" step="0.001" value="0.22" /> <span class="pill" id="massV">0.220</span></label>
-      <label>Lens <input id="lens" type="range" min="0.6" max="1.6" step="0.01" value="1.05" /> <span class="pill" id="lensV">1.05</span></label>
     </div>
 
     <div class="row">
@@ -155,8 +154,6 @@
 
   const massEl = document.getElementById('mass');
   const massV = document.getElementById('massV');
-  const lensEl = document.getElementById('lens');
-  const lensV = document.getElementById('lensV');
   const diskIEl = document.getElementById('diskI');
   const diskIV = document.getElementById('diskIV');
   const diskREl = document.getElementById('diskR');
@@ -230,7 +227,6 @@
     uniform float uCine;
 
     uniform float uRs;
-    uniform float uLens;
     uniform float uDiskI;
     uniform float uRoutMul;
     uniform float uThick;
@@ -312,13 +308,11 @@
       float nearH = 1.0 - smoothstep(rs*1.2, rs*4.8, r);
       float anom = uAnom * nearH;
 
-      // lensing deflection
+      // lensing deflection (derived from mass; no separate lens slider)
       float def = (rs*rs) / (r*r + 0.004);
       def *= smoothstep(rs*0.95, rs*7.5, r);
       def *= mix(0.82, 1.05, uCine);
-      def *= uLens;
 
-      // micro-caustics shimmer near horizon
       float shimmer = (fbm(p*18.0 + vec2(0.0, t*0.55) + uSeed) - 0.5);
       def *= 1.0 + anom*(0.26*shimmer);
 
@@ -345,14 +339,14 @@
       float neb2 = fbm(lp*2.4 + vec2(-t*0.006, t*0.008) + uSeed*0.31);
       float neb = pow(clamp(0.55*neb1 + 0.45*neb2, 0.0, 1.0), 2.15);
 
-      vec3 nebCol = vec3(0.022,0.030,0.055)
-        + 0.18*vec3(0.18,0.26,0.85)*neb
+      vec3 nebCol = vec3(0.018,0.024,0.050)
+        + 0.20*vec3(0.16,0.24,0.90)*neb
         + 0.08*vec3(0.75,0.22,0.10)*pow(neb2, 3.0);
 
       col += nebCol;
-      col += vec3(1.3,1.35,1.45) * s;
+      col += vec3(1.25,1.30,1.40) * s;
 
-      // ----- Accretion disk (beaming + redshift + structure) -----
+      // ----- Accretion disk (beaming + redshift + layered structure) -----
       vec2 dp = lp;
       float drag = 0.28 * (rs / (r + rs));
       drag *= 1.0 + anom*0.75;
@@ -374,34 +368,57 @@
       diskMask *= smoothstep(rin, rin + rs*0.20, dr);
       diskMask *= 1.0 - smoothstep(rout - rs*0.28, rout, dr);
 
-      float fil = fbm(vec2(dphi*8.6, dr*10.2) + vec2(t*1.45, -t*0.75) + uSeed*2.1);
+      // High-detail "layered" look: filaments + shear + many thin radial bands
+      float fil = fbm(vec2(dphi*9.2, dr*12.0) + vec2(t*1.55, -t*0.85) + uSeed*2.1);
+      float swirl = fbm(vec2(dr*7.2, dphi*3.4) + vec2(-t*0.40, t*0.62) + uSeed*3.7);
       float arms = sin(dphi*2.0 + t*2.35) * 0.5 + 0.5;
-      float swirl = fbm(vec2(dr*6.5, dphi*3.1) + vec2(-t*0.33, t*0.56) + uSeed*3.7);
-      float structure = 0.58*fil + 0.22*swirl + 0.20*arms;
-      structure = pow(clamp(structure, 0.0, 1.0), 1.25);
+
+      float lr = log(max(1e-3, dr/rs));
+      float shear = sin(dphi*12.0 + lr*7.0 + t*1.20) * 0.5 + 0.5;
+
+      float bands = 0.0;
+      bands += 0.5 + 0.5*sin(lr*22.0 + t*0.80 + uSeed*1.7);
+      bands += 0.5 + 0.5*sin(lr*38.0 - t*1.05 + uSeed*3.4);
+      bands += 0.5 + 0.5*sin(lr*64.0 + t*1.35 + uSeed*5.1);
+      bands = (bands/3.0);
+      bands = pow(clamp(bands, 0.0, 1.0), 2.2);
+
+      float ringlets = pow(abs(sin(lr*120.0 + t*0.55 + uSeed*2.3)), 18.0);
+      ringlets *= smoothstep(rin + rs*0.2, rin + rs*1.6, dr);
+      ringlets *= 1.0 - smoothstep(rout - rs*0.6, rout, dr);
+
+      float structure = 0.44*fil + 0.16*swirl + 0.14*arms + 0.26*shear;
+      structure = clamp(structure, 0.0, 1.0);
+      float layerDetail = clamp(0.70*bands + 0.55*ringlets, 0.0, 1.0);
+      structure = clamp(0.45*structure + 0.90*layerDetail, 0.0, 1.0);
+      structure = pow(structure, 1.12);
 
       float beta = clamp(0.82 * sqrt(rin / max(dr, rin)), 0.0, 0.88);
       float vlos = sin(dphi) * sin(inc);
       float beam = doppler(beta, vlos);
-
       float gred = sqrt(max(0.0, 1.0 - rs / max(dr, rs*1.02)));
 
-      vec3 hot  = vec3(1.95, 1.25, 0.42);
-      vec3 warm = vec3(1.25, 0.68, 0.20);
-      vec3 ember= vec3(0.52, 0.18, 0.06);
+      // Cinematic mode: mild Doppler tint (blue on approach, warm on recede)
+      float side = smoothstep(-0.18, 0.18, vlos);
+      vec3 blueTint = vec3(0.70, 0.95, 1.35);
+      vec3 redTint  = vec3(1.20, 0.78, 0.40);
+
+      vec3 hot  = mix(vec3(1.95, 1.25, 0.42), vec3(1.45, 1.75, 2.30), uCine);
+      vec3 warm = mix(vec3(1.25, 0.68, 0.20), vec3(0.52, 0.92, 1.65), uCine);
+      vec3 ember= mix(vec3(0.52, 0.18, 0.06), vec3(0.18, 0.30, 0.58), uCine*0.55);
 
       float heat = smoothstep(rout, rin, dr);
       vec3 diskCol = mix(ember, warm, pow(heat, 0.82));
       diskCol = mix(diskCol, hot,  pow(heat, 2.75));
 
-      vec3 beamTint = mix(vec3(1.0), vec3(1.06, 1.03, 1.00), clamp(beam*0.10, 0.0, 1.0));
-      diskCol *= beamTint;
+      vec3 vTint = mix(redTint, blueTint, side);
+      diskCol *= mix(vec3(1.0), vTint, 0.30*uCine);
 
       diskCol *= mix(0.52, 1.0, gred);
-      diskCol *= (0.62 + 1.35*structure) * uDiskI;
+      diskCol *= (0.48 + 1.85*structure) * uDiskI;
 
       float innerGlow = exp(-pow((dr - rin) / (rs*0.115), 2.0));
-      diskCol += innerGlow * vec3(2.1, 1.35, 0.48) * (0.35 + 0.70*structure) * uDiskI;
+      diskCol += innerGlow * mix(vec3(2.1, 1.35, 0.48), vec3(1.4, 2.0, 2.3), uCine) * (0.30 + 0.85*structure) * uDiskI;
 
       float flick = fbm(q*22.0 + vec2(t*2.05, -t*1.38) + uSeed);
       diskCol *= 1.0 + anom*(0.20*(flick - 0.45));
@@ -409,7 +426,7 @@
       diskCol *= diskMask * beam;
       col += diskCol;
 
-      // secondary lensed disk image
+      // secondary lensed disk image (helps create the extra ring)
       vec2 q2 = q;
       q2.y = -q2.y;
       float dr2 = length(q2);
@@ -420,16 +437,24 @@
       disk2 *= 1.0 - smoothstep(rout - rs*0.28, rout, dr2);
       float beta2 = clamp(0.80 * sqrt(rin / max(dr2, rin)), 0.0, 0.86);
       float vlos2 = sin(dphi2) * sin(inc);
+      float side2 = smoothstep(-0.18, 0.18, vlos2);
       float beam2 = doppler(beta2, vlos2);
       float g2 = sqrt(max(0.0, 1.0 - rs / max(dr2, rs*1.02)));
-      float structure2 = pow(clamp(fbm(vec2(dphi2*9.1, dr2*10.0) + vec2(t*1.2, -t*0.6) + uSeed*1.7), 0.0, 1.0), 1.2);
+
+      float lr2 = log(max(1e-3, dr2/rs));
+      float bands2 = 0.0;
+      bands2 += 0.5 + 0.5*sin(lr2*24.0 + t*0.78 + uSeed*1.2);
+      bands2 += 0.5 + 0.5*sin(lr2*44.0 - t*1.10 + uSeed*2.6);
+      bands2 = pow(clamp(bands2*0.5, 0.0, 1.0), 2.0);
+
       vec3 diskCol2 = mix(ember, warm, pow(smoothstep(rout, rin, dr2), 0.85));
       diskCol2 = mix(diskCol2, hot, pow(smoothstep(rout, rin, dr2), 2.6));
+      diskCol2 *= mix(vec3(1.0), mix(redTint, blueTint, side2), 0.30*uCine);
       diskCol2 *= mix(0.55, 1.0, g2);
-      diskCol2 *= (0.55 + 1.10*structure2) * beam2 * uDiskI;
+      diskCol2 *= (0.45 + 1.25*bands2) * beam2 * uDiskI;
 
       float arcMix = pow(nearH, 2.0) * smoothstep(rs*1.35, rs*0.95, r);
-      col += diskCol2 * disk2 * (0.45 + 0.55*arcMix) * arcMix;
+      col += diskCol2 * disk2 * (0.40 + 0.60*arcMix) * arcMix;
 
       // ----- in-shader sparks (always in tune with lensing) -----
       if(uSparksOn > 0.5){
@@ -451,15 +476,21 @@
         float edge = smoothstep(shadow + rs*0.08, shadow - rs*0.02, r);
         sparks *= gate * (1.0 - edge);
 
-        col += sparks * vec3(2.0, 1.55, 0.75) * uSparkAmt;
+        vec3 sparkCol = mix(vec3(2.0, 1.55, 0.75), vec3(0.95, 1.55, 2.25), uCine*side);
+        col += sparks * sparkCol * uSparkAmt;
       }
 
       // ----- Photon ring + corona -----
       float ring = exp(-pow((r - photon) / (rs*0.085), 2.0));
       ring *= 0.35 + 0.65*fbm(vec2(phi*6.0, r*26.0) + vec2(t*0.95, -t*0.75) + uSeed);
-      col += ring * vec3(1.55, 1.20, 0.65) * (1.0 + 0.35*uCine);
+
+      vec3 ringCol = mix(vec3(1.55, 1.20, 0.65), vec3(0.75, 1.10, 1.95), uCine);
+      ringCol *= mix(vec3(1.05,0.95,0.90), vec3(0.85,1.05,1.35), side*uCine);
+      col += ring * ringCol * (1.0 + 0.35*uCine);
 
       float edge = smoothstep(shadow + rs*0.08, shadow - rs*0.02, r);
+
+      // swallow light near the shadow edge
       col *= 1.0 - 0.94*edge;
 
       // black core
@@ -469,12 +500,12 @@
       // warm corona halo
       float halo = exp(-pow((r - shadow) / (rs*0.16), 2.0));
       float haloFine = fbm(vec2(phi*3.0, r*14.0) + vec2(t*0.3, -t*0.22) + uSeed*0.3);
-      col += halo * vec3(0.24, 0.19, 0.14) * (0.5 + 0.5*haloFine) * (0.85 + 0.65*uCine);
+      col += halo * mix(vec3(0.24, 0.19, 0.14), vec3(0.14, 0.22, 0.36), uCine) * (0.5 + 0.5*haloFine) * (0.85 + 0.65*uCine);
 
       float vig = smoothstep(1.50, 0.22, length((vUv-0.5)*vec2(aspect,1.0)));
       col *= 0.70 + 0.30*vig;
 
-      col = min(col, vec3(8.0));
+      col = min(col, vec3(10.0));
       frag = vec4(col, 1.0);
     }
   `;
@@ -511,7 +542,7 @@
       vec2 uv = vUv;
 
       // chromatic aberration (subtle)
-      float ca = 0.0016 * uCine;
+      float ca = 0.0018 * uCine;
       vec2 d = (uv - 0.5);
       vec2 o = d * (0.65 + 0.35*length(d)) * ca;
 
@@ -544,6 +575,7 @@
       vec2 p = (uv*2.0 - 1.0);
       p.x *= aspect;
       p = p / max(0.001, uZoom) + uPan;
+
       float shadow = uRs*1.14;
       float hole = smoothstep(shadow*1.01, shadow*0.98, length(p));
       base *= (1.0 - hole);
@@ -580,7 +612,6 @@
     cine: gl.getUniformLocation(progBH, 'uCine'),
 
     rs: gl.getUniformLocation(progBH, 'uRs'),
-    lens: gl.getUniformLocation(progBH, 'uLens'),
     diskI: gl.getUniformLocation(progBH, 'uDiskI'),
     rout: gl.getUniformLocation(progBH, 'uRoutMul'),
     thick: gl.getUniformLocation(progBH, 'uThick'),
@@ -607,7 +638,6 @@
   let speed = parseFloat(speedEl.value);
 
   let rs = parseFloat(massEl.value);
-  let lens = parseFloat(lensEl.value);
   let diskI = parseFloat(diskIEl.value);
   let routMul = parseFloat(diskREl.value);
   let thick = parseFloat(thickEl.value);
@@ -628,7 +658,6 @@
     speedV.textContent = `${speed.toFixed(2)}`;
 
     massV.textContent = rs.toFixed(3);
-    lensV.textContent = lens.toFixed(2);
     diskIV.textContent = diskI.toFixed(2);
     diskRV.textContent = routMul.toFixed(2);
     thickV.textContent = thick.toFixed(3);
@@ -643,7 +672,6 @@
     speed = 1.0;
 
     rs = 0.22;
-    lens = 1.05;
     diskI = 1.0;
     routMul = 6.9;
     thick = 0.074;
@@ -657,7 +685,6 @@
     speedEl.value = speed;
 
     massEl.value = rs;
-    lensEl.value = lens;
     diskIEl.value = diskI;
     diskREl.value = routMul;
     thickEl.value = thick;
@@ -679,7 +706,6 @@
   speedEl.addEventListener('input', () => { speed = parseFloat(speedEl.value); setLabels(); });
 
   massEl.addEventListener('input', () => { rs = parseFloat(massEl.value); setLabels(); });
-  lensEl.addEventListener('input', () => { lens = parseFloat(lensEl.value); setLabels(); });
   diskIEl.addEventListener('input', () => { diskI = parseFloat(diskIEl.value); setLabels(); });
   diskREl.addEventListener('input', () => { routMul = parseFloat(diskREl.value); setLabels(); });
   thickEl.addEventListener('input', () => { thick = parseFloat(thickEl.value); setLabels(); });
@@ -689,7 +715,7 @@
   sparksEl.addEventListener('change', () => { sparksOn = sparksEl.checked; });
   cineEl.addEventListener('change', () => { cineOn = cineEl.checked; });
 
-  toggleUI.addEventListener('click', () => {
+  document.getElementById('toggleUI').addEventListener('click', () => {
     const hidden = ui.style.display === 'none';
     ui.style.display = hidden ? '' : 'none';
     toggleUI.textContent = hidden ? 'Hide UI' : 'Show UI';
@@ -820,7 +846,7 @@
   let seedStr = (location.hash.match(/seed=([^&]+)/)?.[1] || '').trim();
   if(!seedStr) seedStr = String(Math.floor(Math.random()*1e9));
 
-  // IMPORTANT: declare before setSeed() uses it
+  // declared before use
   let uSeedVal = 0.0;
 
   function setSeed(str){
@@ -828,7 +854,6 @@
     const h = xmur3(seedStr);
     const a = h();
     const b = h();
-    // stable seed value for the shader (two mixed 32-bit hashes)
     uSeedVal = (a/4294967296)*1000.0 + (b/4294967296)*0.001;
 
     const params = new URLSearchParams(location.hash.replace(/^#/,''));
@@ -840,11 +865,8 @@
   randomBtn.addEventListener('click', () => setSeed(String(Math.floor(Math.random()*1e9))));
 
   // ---------- lightweight self-tests (non-throwing) ----------
-  // These are sanity checks to prevent regressions like "uSeedVal not defined".
   (function runSelfTests(){
-    console.assert(typeof uSeedVal === 'number', 'SelfTest: uSeedVal should be a number');
-    console.assert(Number.isFinite(uSeedVal), 'SelfTest: uSeedVal should be finite');
-    console.assert(canvas && gl, 'SelfTest: canvas/gl should exist');
+    console.assert(typeof uSeedVal === 'number' && Number.isFinite(uSeedVal), 'SelfTest: uSeedVal should be a finite number');
     console.assert(sceneFBO !== null && sceneTex !== null, 'SelfTest: scene target should be created');
   })();
 
@@ -878,7 +900,6 @@
     gl.viewport(0,0,w,h);
     gl.disable(gl.BLEND);
 
-    // Scene
     gl.useProgram(progBH);
     gl.bindVertexArray(quad);
 
@@ -893,7 +914,6 @@
     gl.uniform1f(U.cine, cineOn ? 1.0 : 0.0);
 
     gl.uniform1f(U.rs, rs);
-    gl.uniform1f(U.lens, lens);
     gl.uniform1f(U.diskI, diskI);
     gl.uniform1f(U.rout, routMul);
     gl.uniform1f(U.thick, thick);
@@ -902,7 +922,6 @@
 
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     gl.bindVertexArray(null);
-
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
     // Mips for bloom
@@ -934,7 +953,13 @@
 
   step();
 
-  // ---------- hotkeys ----------
+  // ---------- UI / hotkeys ----------
+  toggleUI.addEventListener('click', () => {
+    const hidden = ui.style.display === 'none';
+    ui.style.display = hidden ? '' : 'none';
+    toggleUI.textContent = hidden ? 'Hide UI' : 'Show UI';
+  });
+
   window.addEventListener('keydown', (e) => {
     const k = e.key.toLowerCase();
     if(e.code === 'Space'){
