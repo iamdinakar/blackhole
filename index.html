@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <title>Cinematic Golden Black Hole</title>
+  <title>Cinematic Black Hole</title>
   <style>
     :root{ color-scheme: dark; }
     html,body{ height:100%; margin:0; background:#02020a; overflow:hidden;
@@ -21,7 +21,7 @@
       backdrop-filter: blur(8px);
       -webkit-backdrop-filter: blur(8px);
       user-select:none;
-      max-width:min(560px, calc(100vw - 24px));
+      max-width:min(620px, calc(100vw - 24px));
     }
     #ui .row{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
     #ui .row.tight{ gap:6px; }
@@ -64,37 +64,54 @@
       <button id="focus">Focus horizon</button>
       <button id="reset">Reset view</button>
       <button id="random">New seed</button>
+      <button id="copy">Copy link</button>
+      <button id="shot">Snapshot 2×</button>
       <span class="pill" id="fps">— fps</span>
+    </div>
+
+    <div class="row">
+      <label class="muted">Preset
+        <select id="preset">
+          <option value="golden" selected>Golden</option>
+          <option value="interstellar">Interstellar</option>
+          <option value="cold">Cold</option>
+          <option value="minimal">Minimal</option>
+        </select>
+      </label>
+      <span class="pill muted" id="seedTag">seed=—</span>
     </div>
 
     <div class="row tight">
       <label><input id="anom" type="checkbox" checked /> Horizon anomalies</label>
       <label><input id="sparks" type="checkbox" checked /> Horizon sparks</label>
-      <label><input id="cine" type="checkbox" checked /> Cinematic</label>
+      <label><input id="cine" type="checkbox" /> Cinematic</label>
+      <label><input id="drift" type="checkbox" checked /> Drift</label>
+      <label><input id="autoexp" type="checkbox" checked /> Auto exposure</label>
     </div>
 
     <div class="row">
-      <label>Zoom <input id="zoom" type="range" min="0.55" max="18" step="0.01" value="1.4" /> <span class="pill" id="zoomV">1.40×</span></label>
+      <label>Zoom <input id="zoom" type="range" min="0.55" max="18" step="0.01" value="1.40" /> <span class="pill" id="zoomV">1.40×</span></label>
       <label>Inclination <input id="inc" type="range" min="0" max="82" step="1" value="68" /> <span class="pill" id="incV">68°</span></label>
     </div>
 
     <div class="row">
       <label>Mass <input id="mass" type="range" min="0.14" max="0.34" step="0.001" value="0.22" /> <span class="pill" id="massV">0.220</span></label>
+      <label>Disk intensity <input id="diskI" type="range" min="0" max="2.8" step="0.01" value="1.05" /> <span class="pill" id="diskIV">1.05</span></label>
     </div>
 
     <div class="row">
-      <label>Disk intensity <input id="diskI" type="range" min="0" max="2.8" step="0.01" value="1.0" /> <span class="pill" id="diskIV">1.00</span></label>
-      <label>Disk radius <input id="diskR" type="range" min="4.5" max="10.5" step="0.01" value="6.9" /> <span class="pill" id="diskRV">6.90</span></label>
+      <label>Disk radius <input id="diskR" type="range" min="4.5" max="10.5" step="0.01" value="6.90" /> <span class="pill" id="diskRV">6.90</span></label>
+      <label>Disk thickness <input id="thick" type="range" min="0.04" max="0.18" step="0.001" value="0.078" /> <span class="pill" id="thickV">0.078</span></label>
     </div>
 
     <div class="row">
-      <label>Disk thickness <input id="thick" type="range" min="0.04" max="0.16" step="0.001" value="0.074" /> <span class="pill" id="thickV">0.074</span></label>
-      <label>Sparks <input id="sparkAmt" type="range" min="0" max="2.2" step="0.01" value="1.0" /> <span class="pill" id="sparkV">1.00</span></label>
+      <label>Sparks <input id="sparkAmt" type="range" min="0" max="2.2" step="0.01" value="1.00" /> <span class="pill" id="sparkV">1.00</span></label>
+      <label>Bloom <input id="bloom" type="range" min="0" max="2.6" step="0.01" value="1.25" /> <span class="pill" id="bloomV">1.25</span></label>
     </div>
 
     <div class="row">
-      <label>Bloom <input id="bloom" type="range" min="0" max="2.4" step="0.01" value="1.25" /> <span class="pill" id="bloomV">1.25</span></label>
-      <label>Speed <input id="speed" type="range" min="0" max="1.8" step="0.01" value="1" /> <span class="pill" id="speedV">1.00</span></label>
+      <label>Halation <input id="hala" type="range" min="0" max="2.0" step="0.01" value="0.75" /> <span class="pill" id="halaV">0.75</span></label>
+      <label>Speed <input id="speed" type="range" min="0" max="1.8" step="0.01" value="1.00" /> <span class="pill" id="speedV">1.00</span></label>
       <label class="muted">Quality
         <select id="q">
           <option value="1">Ultra</option>
@@ -106,7 +123,7 @@
     </div>
 
     <div id="help" class="muted">
-      Drag to pan · wheel/trackpad to zoom · Space = pause · H = toggle UI · F = focus
+      Drag to pan · wheel/trackpad to zoom · Space=pause · H=toggle UI · F=focus · Copy link shares your exact scene
     </div>
   </div>
 
@@ -118,7 +135,6 @@
   const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
   const now = ()=>performance.now()*0.001;
 
-  // Deterministic RNG hash
   function xmur3(str){
     let h=1779033703^str.length;
     for(let i=0;i<str.length;i++){
@@ -132,15 +148,31 @@
     };
   }
 
+  function parseHash(){
+    const raw = location.hash.replace(/^#/, '');
+    return new URLSearchParams(raw);
+  }
+
+  function writeHash(params){
+    history.replaceState(null,'', '#'+params.toString());
+  }
+
+  function fmt(n, d=2){ return Number(n).toFixed(d); }
+
   // ---------- DOM ----------
   const canvas = document.getElementById('c');
   const ui = document.getElementById('ui');
   const toggleUI = document.getElementById('toggleUI');
+
   const playBtn = document.getElementById('play');
   const focusBtn = document.getElementById('focus');
   const resetBtn = document.getElementById('reset');
   const randomBtn = document.getElementById('random');
+  const copyBtn = document.getElementById('copy');
+  const shotBtn = document.getElementById('shot');
   const fpsEl = document.getElementById('fps');
+  const presetEl = document.getElementById('preset');
+  const seedTag = document.getElementById('seedTag');
 
   const zoomEl = document.getElementById('zoom');
   const zoomV = document.getElementById('zoomV');
@@ -148,6 +180,8 @@
   const incV = document.getElementById('incV');
   const bloomEl = document.getElementById('bloom');
   const bloomV = document.getElementById('bloomV');
+  const halaEl = document.getElementById('hala');
+  const halaV = document.getElementById('halaV');
   const speedEl = document.getElementById('speed');
   const speedV = document.getElementById('speedV');
   const qEl = document.getElementById('q');
@@ -166,8 +200,411 @@
   const anomEl = document.getElementById('anom');
   const sparksEl = document.getElementById('sparks');
   const cineEl = document.getElementById('cine');
+  const driftEl = document.getElementById('drift');
+  const autoExpEl = document.getElementById('autoexp');
 
+  console.assert(canvas && ui && toggleUI, 'SelfTest: core DOM nodes missing');
+
+  // ---------- state ----------
+  // NOTE: px/py and grade settings are not shown in UI, but are included in the hash so presets feel distinct and shareable.
+  const defaults = {
+    preset: 'golden',
+    seed: String(Math.floor(Math.random()*1e9)),
+
+    // view
+    zoom: 1.40,
+    inc: 68,
+    px: 0.0,
+    py: 0.0,
+
+    // physics-ish
+    mass: 0.22,
+
+    // disk
+    diskI: 1.05,
+    diskR: 6.90,
+    thick: 0.078,
+
+    // effects
+    sparkAmt: 1.00,
+    bloom: 1.25,
+    hala: 0.75,
+    speed: 1.00,
+    q: 0.75,
+
+    // toggles
+    anom: 1,
+    sparks: 1,
+    cine: 0,
+    drift: 1,
+    autoexp: 1,
+
+    // hidden grading (presets use these so they look obviously different)
+    gradeR: 1.10,
+    gradeG: 1.02,
+    gradeB: 0.92,
+    sat: 1.08,
+    contrast: 1.10,
+  };
+
+  // Presets are intentionally more different now: they change camera (zoom + recentre), brightness (autoexp), and grade.
+  const presets = {
+    golden: {$1anom: 1, sparks: 1, cine: 0, drift: 1, autoexp: 1,
+      gradeR: 1.18, gradeG: 1.05, gradeB: 0.86, sat: 1.10, contrast: 1.12,
+    },
+    interstellar: {
+      zoom: 1.85, inc: 74, mass: 0.245,
+      diskI: 1.35, diskR: 7.7, thick: 0.068,
+      sparkAmt: 0.85, bloom: 1.55, hala: 1.18,
+      speed: 0.95, q: 0.75,
+      anom: 1, sparks: 1, cine: 1, drift: 1, autoexp: 1,
+      gradeR: 1.08, gradeG: 1.06, gradeB: 1.16, sat: 1.14, contrast: 1.16,
+    },
+    cold: {
+      zoom: 1.55, inc: 70, mass: 0.205,
+      diskI: 0.95, diskR: 6.35, thick: 0.074,
+      sparkAmt: 0.55, bloom: 0.95, hala: 0.40,
+      speed: 1.05, q: 0.75,
+      anom: 1, sparks: 1, cine: 1, drift: 1, autoexp: 0,
+      gradeR: 0.92, gradeG: 1.00, gradeB: 1.26, sat: 1.02, contrast: 1.10,
+    },
+    minimal: {
+      zoom: 1.25, inc: 52, mass: 0.20,
+      diskI: 0.75, diskR: 6.25, thick: 0.092,
+      sparkAmt: 0.00, bloom: 0.35, hala: 0.05,
+      speed: 1.00, q: 0.75,
+      anom: 0, sparks: 0, cine: 0, drift: 0, autoexp: 0,
+      gradeR: 1.00, gradeG: 1.00, gradeB: 1.00, sat: 0.86, contrast: 1.06,
+    }
+  };
+
+  const state = { ...defaults };
+
+  // SelfTest: presets integrity and difference (warn if accidentally too similar)
+  console.assert(Object.keys(presets).length >= 4, 'SelfTest: expected at least 4 presets');
+  console.assert(!!presets.golden && !!presets.interstellar, 'SelfTest: missing required presets');
+  (function selfTestPresetDelta(){
+    const g = presets.golden;
+    const names = Object.keys(presets);
+    for(const n of names){
+      if(n === 'golden') continue;
+      const p = presets[n];
+      const dz = Math.abs((p.zoom ?? g.zoom) - g.zoom);
+      const di = Math.abs((p.inc ?? g.inc) - g.inc);
+      const dg = Math.abs((p.gradeB ?? g.gradeB) - g.gradeB) + Math.abs((p.gradeR ?? g.gradeR) - g.gradeR);
+      console.assert(dz > 0.10 || di > 3 || dg > 0.10, `SelfTest: preset '${n}' may be too similar to golden`);
+    }
+  })();
+
+  function coerce01(v){
+    if(v === '0' || v === 0) return 0;
+    return 1;
+  }
+
+  function loadFromHash(){
+    const p = parseHash();
+    if(p.get('seed')) state.seed = p.get('seed');
+    if(p.get('preset')) state.preset = p.get('preset');
+
+    const num = (k, min, max) => {
+      if(!p.has(k)) return;
+      const v = parseFloat(p.get(k));
+      if(Number.isFinite(v)) state[k] = clamp(v, min, max);
+    };
+    const int = (k, min, max) => {
+      if(!p.has(k)) return;
+      const v = parseInt(p.get(k), 10);
+      if(Number.isFinite(v)) state[k] = clamp(v, min, max);
+    };
+    const flag = (k) => { if(p.has(k)) state[k] = coerce01(p.get(k)); };
+
+    num('zoom', 0.55, 18);
+    int('inc', 0, 82);
+    num('px', -6.0, 6.0);
+    num('py', -6.0, 6.0);
+
+    num('mass', 0.14, 0.34);
+    num('diskI', 0, 2.8);
+    num('diskR', 4.5, 10.5);
+    num('thick', 0.04, 0.18);
+
+    num('sparkAmt', 0, 2.2);
+    num('bloom', 0, 2.6);
+    num('hala', 0, 2.0);
+    num('speed', 0, 1.8);
+    num('q', 0.35, 1.0);
+
+    // hidden grading
+    num('gr', 0.70, 1.40); // gradeR
+    num('gg', 0.70, 1.40); // gradeG
+    num('gb', 0.70, 1.60); // gradeB
+    num('sat', 0.65, 1.40);
+    num('con', 0.85, 1.35);
+
+    // map grade short keys to state
+    if(p.has('gr')) state.gradeR = clamp(parseFloat(p.get('gr')), 0.70, 1.40);
+    if(p.has('gg')) state.gradeG = clamp(parseFloat(p.get('gg')), 0.70, 1.40);
+    if(p.has('gb')) state.gradeB = clamp(parseFloat(p.get('gb')), 0.70, 1.60);
+
+    flag('anom');
+    flag('sparks');
+    flag('cine');
+    flag('drift');
+    flag('autoexp');
+
+    if(!presets[state.preset]) state.preset = 'golden';
+  }
+
+  function applyStateToUI(){
+    presetEl.value = state.preset;
+    seedTag.textContent = `seed=${state.seed}`;
+
+    zoomEl.value = state.zoom;
+    incEl.value = state.inc;
+
+    massEl.value = state.mass;
+    diskIEl.value = state.diskI;
+    diskREl.value = state.diskR;
+    thickEl.value = state.thick;
+
+    sparkAmtEl.value = state.sparkAmt;
+    bloomEl.value = state.bloom;
+    halaEl.value = state.hala;
+    speedEl.value = state.speed;
+    qEl.value = String(state.q);
+
+    anomEl.checked = !!state.anom;
+    sparksEl.checked = !!state.sparks;
+    cineEl.checked = !!state.cine;
+    driftEl.checked = !!state.drift;
+    autoExpEl.checked = !!state.autoexp;
+
+    zoomV.textContent = `${fmt(state.zoom,2)}×`;
+    incV.textContent = `${Math.round(state.inc)}°`;
+    massV.textContent = fmt(state.mass,3);
+    diskIV.textContent = fmt(state.diskI,2);
+    diskRV.textContent = fmt(state.diskR,2);
+    thickV.textContent = fmt(state.thick,3);
+    sparkV.textContent = fmt(state.sparkAmt,2);
+    bloomV.textContent = fmt(state.bloom,2);
+    halaV.textContent = fmt(state.hala,2);
+    speedV.textContent = fmt(state.speed,2);
+  }
+
+  let hashTimer = 0;
+  function scheduleHashWrite(){
+    clearTimeout(hashTimer);
+    hashTimer = setTimeout(() => {
+      const p = new URLSearchParams();
+      p.set('preset', state.preset);
+      p.set('seed', state.seed);
+
+      p.set('zoom', fmt(state.zoom,2));
+      p.set('inc', String(Math.round(state.inc)));
+      p.set('px', fmt(state.px,3));
+      p.set('py', fmt(state.py,3));
+
+      p.set('mass', fmt(state.mass,3));
+      p.set('diskI', fmt(state.diskI,2));
+      p.set('diskR', fmt(state.diskR,2));
+      p.set('thick', fmt(state.thick,3));
+
+      p.set('sparkAmt', fmt(state.sparkAmt,2));
+      p.set('bloom', fmt(state.bloom,2));
+      p.set('hala', fmt(state.hala,2));
+      p.set('speed', fmt(state.speed,2));
+      p.set('q', fmt(state.q,2));
+
+      // hidden grading
+      p.set('gr', fmt(state.gradeR,3));
+      p.set('gg', fmt(state.gradeG,3));
+      p.set('gb', fmt(state.gradeB,3));
+      p.set('sat', fmt(state.sat,3));
+      p.set('con', fmt(state.contrast,3));
+
+      p.set('anom', state.anom ? '1' : '0');
+      p.set('sparks', state.sparks ? '1' : '0');
+      p.set('cine', state.cine ? '1' : '0');
+      p.set('drift', state.drift ? '1' : '0');
+      p.set('autoexp', state.autoexp ? '1' : '0');
+
+      writeHash(p);
+    }, 120);
+  }
+
+  // ---------- Seed ----------
+  let uSeedVal = 0.0;
+  function rebuildSeed(){
+    const h = xmur3(state.seed);
+    const a = h();
+    const b = h();
+    uSeedVal = (a/4294967296)*1000.0 + (b/4294967296)*0.001;
+    console.assert(Number.isFinite(uSeedVal), 'SelfTest: uSeedVal should be finite');
+  }
+
+  function setSeed(str){
+    state.seed = String(str || '').trim() || String(Math.floor(Math.random()*1e9));
+    seedTag.textContent = `seed=${state.seed}`;
+    scheduleHashWrite();
+    rebuildSeed();
+  }
+
+  function applyPreset(name){
+    if(!presets[name]) return;
+    state.preset = name;
+    const o = presets[name];
+    for(const k of Object.keys(o)) state[k] = o[k];
+
+    // Make the change visibly noticeable:
+    // - recenter view (since copy link now includes pan)
+    state.px = 0.0;
+    state.py = 0.0;
+
+    applyStateToUI();
+    scheduleHashWrite();
+  }
+
+  // ---------- init from hash ----------
+  loadFromHash();
+  if(!presets[state.preset]) state.preset = 'golden';
+  rebuildSeed();
+  applyStateToUI();
+
+  // SelfTest: hash roundtrip basic
+  (function selfTestHash(){
+    const p = new URLSearchParams();
+    p.set('preset','golden');
+    p.set('seed','123');
+    p.set('px','0.125');
+    p.set('py','-0.250');
+    writeHash(p);
+    const r = parseHash();
+    console.assert(r.get('preset') === 'golden' && r.get('seed') === '123', 'SelfTest: hash read/write failed');
+    console.assert(r.get('px') === '0.125' && r.get('py') === '-0.250', 'SelfTest: hash pan keys missing');
+    // restore current state hash
+    scheduleHashWrite();
+  })();
+
+  // Smooth transitions so preset switching feels cinematic and obvious.
+  const LIVE_KEYS = [
+    'zoom','inc','px','py',
+    'mass','diskI','diskR','thick',
+    'sparkAmt','bloom','hala','speed',
+    'anom','sparks','cine','drift','autoexp',
+    'gradeR','gradeG','gradeB','sat','contrast'
+  ];
+  const live = {};
+  for(const k of LIVE_KEYS) live[k] = state[k];
+
+  // ---------- UI events ----------
   let paused = false;
+
+  const toggleUIFn = () => {
+    const hidden = ui.style.display === 'none';
+    ui.style.display = hidden ? '' : 'none';
+    toggleUI.textContent = hidden ? 'Hide UI' : 'Show UI';
+  };
+  toggleUI.addEventListener('click', toggleUIFn);
+
+  playBtn.addEventListener('click', () => {
+    paused = !paused;
+    playBtn.textContent = paused ? 'Play' : 'Pause';
+  });
+
+  function resetView(){
+    const keepSeed = state.seed;
+    Object.assign(state, defaults);
+    state.seed = keepSeed;
+    state.preset = 'golden';
+    applyStateToUI();
+    scheduleHashWrite();
+  }
+
+  function focusHorizon(){
+    state.zoom = 10.5;
+    applyStateToUI();
+    scheduleHashWrite();
+  }
+
+  resetBtn.addEventListener('click', resetView);
+  focusBtn.addEventListener('click', focusHorizon);
+  randomBtn.addEventListener('click', () => setSeed(String(Math.floor(Math.random()*1e9))));
+  presetEl.addEventListener('change', () => applyPreset(presetEl.value));
+
+  function bindRange(el, key, min, max){
+    el.addEventListener('input', () => {
+      const v = clamp(parseFloat(el.value), min, max);
+      state[key] = v;
+      applyStateToUI();
+      scheduleHashWrite();
+      if(key === 'q') resize();
+    });
+  }
+
+  bindRange(zoomEl, 'zoom', 0.55, 18);
+  bindRange(incEl, 'inc', 0, 82);
+  bindRange(massEl, 'mass', 0.14, 0.34);
+  bindRange(diskIEl, 'diskI', 0, 2.8);
+  bindRange(diskREl, 'diskR', 4.5, 10.5);
+  bindRange(thickEl, 'thick', 0.04, 0.18);
+  bindRange(sparkAmtEl, 'sparkAmt', 0, 2.2);
+  bindRange(bloomEl, 'bloom', 0, 2.6);
+  bindRange(halaEl, 'hala', 0, 2.0);
+  bindRange(speedEl, 'speed', 0, 1.8);
+  qEl.addEventListener('change', () => {
+    state.q = clamp(parseFloat(qEl.value), 0.35, 1.0);
+    applyStateToUI();
+    scheduleHashWrite();
+    resize();
+  });
+
+  function bindFlag(el, key){
+    el.addEventListener('change', () => {
+      state[key] = el.checked ? 1 : 0;
+      scheduleHashWrite();
+    });
+  }
+
+  bindFlag(anomEl, 'anom');
+  bindFlag(sparksEl, 'sparks');
+  bindFlag(cineEl, 'cine');
+  bindFlag(driftEl, 'drift');
+  bindFlag(autoExpEl, 'autoexp');
+
+  copyBtn.addEventListener('click', async () => {
+    scheduleHashWrite();
+    const url = location.href;
+    try{
+      await navigator.clipboard.writeText(url);
+      copyBtn.textContent = 'Copied!';
+      setTimeout(()=>copyBtn.textContent='Copy link', 800);
+    }catch{
+      prompt('Copy this link:', url);
+    }
+  });
+
+  // Scroll / pinch zoom
+  window.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const dir = Math.sign(e.deltaY);
+    const factor = Math.exp(-dir * 0.08);
+    state.zoom = clamp(state.zoom * factor, parseFloat(zoomEl.min), parseFloat(zoomEl.max));
+    applyStateToUI();
+    scheduleHashWrite();
+  }, { passive:false });
+
+  // Hotkeys
+  window.addEventListener('keydown', (e) => {
+    const k = e.key.toLowerCase();
+    if(e.code === 'Space'){
+      e.preventDefault();
+      paused = !paused;
+      playBtn.textContent = paused ? 'Play' : 'Pause';
+    }
+    if(k === 'r') resetView();
+    if(k === 'f') focusHorizon();
+    if(k === 'h') toggleUIFn();
+  });
 
   // ---------- WebGL2 setup ----------
   const gl = canvas.getContext('webgl2', { antialias:false, alpha:false, depth:false, stencil:false, preserveDrawingBuffer:false });
@@ -272,6 +709,24 @@
       return pow(1.0/denom, 3.1);
     }
 
+    float starsAt(vec2 x, float t, float seed){
+      float s = 0.0;
+      vec2 p = x;
+      for(int i=0;i<3;i++){
+        float sc = mix(36.0, 92.0, float(i)/2.0);
+        vec2 g = floor(p*sc + seed*0.01 + float(i)*17.3);
+        float h = hash12(g + seed);
+        vec2 f = fract(p*sc);
+        vec2 c = f - 0.5;
+        float d = dot(c, c);
+        float star = smoothstep(0.040, 0.0, d) * smoothstep(0.9968, 1.0, h);
+        float tw = 0.65 + 0.35*sin(t*2.0 + h*9.0);
+        s += star * tw * (0.70 + 0.45*hash12(g + 9.1));
+        p = rot(p, 1.12);
+      }
+      return s;
+    }
+
     float sparkLayer(vec2 pol, float t, float seed, float gridA, float gridR, float keep, float sharp){
       vec2 g = vec2(pol.x*gridA, pol.y*gridR + t);
       vec2 i = floor(g);
@@ -292,7 +747,6 @@
       float aspect = uRes.x / uRes.y;
       p.x *= aspect;
 
-      // camera space (pan/zoom)
       p = p / max(0.001, uZoom) + uPan;
 
       float rs = uRs;
@@ -305,13 +759,12 @@
       float r = length(p);
       float phi = atan(p.y, p.x);
 
-      float nearH = 1.0 - smoothstep(rs*1.2, rs*4.8, r);
+      float nearH = 1.0 - smoothstep(rs*1.2, rs*5.6, r);
       float anom = uAnom * nearH;
 
-      // lensing deflection (derived from mass; no separate lens slider)
       float def = (rs*rs) / (r*r + 0.004);
-      def *= smoothstep(rs*0.95, rs*7.5, r);
-      def *= mix(0.82, 1.05, uCine);
+      def *= smoothstep(rs*0.95, rs*8.2, r);
+      def *= mix(0.86, 1.10, uCine);
 
       float shimmer = (fbm(p*18.0 + vec2(0.0, t*0.55) + uSeed) - 0.5);
       def *= 1.0 + anom*(0.26*shimmer);
@@ -321,32 +774,28 @@
 
       vec3 col = vec3(0.0);
 
-      // ----- Deep background (stars + nebula) -----
-      vec2 sp = lp*1.75;
-      float s = 0.0;
-      for(int i=0;i<3;i++){
-        vec2 g = floor(sp*38.0 + float(i)*17.3);
-        float h = hash12(g + uSeed);
-        vec2 f = fract(sp*38.0);
-        float d = length(f - 0.5);
-        float star = smoothstep(0.060, 0.0, d) * smoothstep(0.997, 1.0, h);
-        float tw = 0.65 + 0.35*sin(t*2.0 + h*9.0);
-        s += star * tw * (0.70 + 0.40*hash12(g + 9.1));
-        sp = rot(sp, 1.15);
-      }
-
+      // ----- Background (nebula + lensed star arcs) -----
       float neb1 = fbm(lp*1.2 + vec2(t*0.012, -t*0.010) + uSeed*0.13);
       float neb2 = fbm(lp*2.4 + vec2(-t*0.006, t*0.008) + uSeed*0.31);
       float neb = pow(clamp(0.55*neb1 + 0.45*neb2, 0.0, 1.0), 2.15);
 
-      vec3 nebCol = vec3(0.018,0.024,0.050)
-        + 0.20*vec3(0.16,0.24,0.90)*neb
-        + 0.08*vec3(0.75,0.22,0.10)*pow(neb2, 3.0);
+      vec3 nebCol = vec3(0.015,0.020,0.045)
+        + 0.22*vec3(0.12,0.22,0.90)*neb
+        + 0.08*vec3(0.75,0.20,0.10)*pow(neb2, 3.0);
+
+      float s0 = starsAt(lp*1.35, t, uSeed);
+
+      vec2 tanDir = normalize(vec2(-lp.y, lp.x) + 1e-6);
+      float streak = pow(clamp(nearH, 0.0, 1.0), 1.5) * (0.65 + 0.55*uCine);
+      float so = 0.025 * (1.0 + 2.5*streak);
+      float s1 = starsAt((lp + tanDir*so)*1.35, t, uSeed);
+      float s2 = starsAt((lp - tanDir*so)*1.35, t, uSeed);
+      float sStar = mix(s0, (s0*0.55 + 0.225*(s1+s2)), clamp(streak, 0.0, 1.0));
 
       col += nebCol;
-      col += vec3(1.25,1.30,1.40) * s;
+      col += vec3(1.25,1.30,1.45) * sStar;
 
-      // ----- Accretion disk (beaming + redshift + layered structure) -----
+      // ----- Accretion disk (layered / volumetric-ish slab) -----
       vec2 dp = lp;
       float drag = 0.28 * (rs / (r + rs));
       drag *= 1.0 + anom*0.75;
@@ -363,15 +812,14 @@
       float thickness = uThick + 0.055*fbm(vec2(dphi*1.6, dr*9.4) + vec2(t*0.62, -t*0.28) + uSeed);
       thickness *= 1.0 + anom*1.0;
 
-      float band = exp(-pow(abs(q.y) / (thickness + 1e-4), 1.30));
-      float diskMask = band;
+      float y = abs(q.y);
+      float coreD = exp(-pow(y / (thickness + 1e-4), 1.15));
+      float wingD = exp(-pow(y / (thickness*2.2 + 1e-4), 1.85)) * 0.55;
+      float dens = clamp(coreD + wingD, 0.0, 1.0);
+
+      float diskMask = dens;
       diskMask *= smoothstep(rin, rin + rs*0.20, dr);
       diskMask *= 1.0 - smoothstep(rout - rs*0.28, rout, dr);
-
-      // High-detail "layered" look: filaments + shear + many thin radial bands
-      float fil = fbm(vec2(dphi*9.2, dr*12.0) + vec2(t*1.55, -t*0.85) + uSeed*2.1);
-      float swirl = fbm(vec2(dr*7.2, dphi*3.4) + vec2(-t*0.40, t*0.62) + uSeed*3.7);
-      float arms = sin(dphi*2.0 + t*2.35) * 0.5 + 0.5;
 
       float lr = log(max(1e-3, dr/rs));
       float shear = sin(dphi*12.0 + lr*7.0 + t*1.20) * 0.5 + 0.5;
@@ -387,18 +835,21 @@
       ringlets *= smoothstep(rin + rs*0.2, rin + rs*1.6, dr);
       ringlets *= 1.0 - smoothstep(rout - rs*0.6, rout, dr);
 
-      float structure = 0.44*fil + 0.16*swirl + 0.14*arms + 0.26*shear;
+      float fil = fbm(vec2(dphi*9.2, dr*12.0) + vec2(t*1.55, -t*0.85) + uSeed*2.1);
+      float swirl = fbm(vec2(dr*7.2, dphi*3.4) + vec2(-t*0.40, t*0.62) + uSeed*3.7);
+      float arms = sin(dphi*2.0 + t*2.35) * 0.5 + 0.5;
+
+      float structure = 0.40*fil + 0.14*swirl + 0.14*arms + 0.32*shear;
       structure = clamp(structure, 0.0, 1.0);
       float layerDetail = clamp(0.70*bands + 0.55*ringlets, 0.0, 1.0);
-      structure = clamp(0.45*structure + 0.90*layerDetail, 0.0, 1.0);
-      structure = pow(structure, 1.12);
+      structure = clamp(0.40*structure + 0.98*layerDetail, 0.0, 1.0);
+      structure = pow(structure, 1.10);
 
       float beta = clamp(0.82 * sqrt(rin / max(dr, rin)), 0.0, 0.88);
       float vlos = sin(dphi) * sin(inc);
       float beam = doppler(beta, vlos);
       float gred = sqrt(max(0.0, 1.0 - rs / max(dr, rs*1.02)));
 
-      // Cinematic mode: mild Doppler tint (blue on approach, warm on recede)
       float side = smoothstep(-0.18, 0.18, vlos);
       vec3 blueTint = vec3(0.70, 0.95, 1.35);
       vec3 redTint  = vec3(1.20, 0.78, 0.40);
@@ -408,31 +859,46 @@
       vec3 ember= mix(vec3(0.52, 0.18, 0.06), vec3(0.18, 0.30, 0.58), uCine*0.55);
 
       float heat = smoothstep(rout, rin, dr);
-      vec3 diskCol = mix(ember, warm, pow(heat, 0.82));
-      diskCol = mix(diskCol, hot,  pow(heat, 2.75));
+      vec3 baseCol = mix(ember, warm, pow(heat, 0.82));
+      baseCol = mix(baseCol, hot,  pow(heat, 2.75));
 
       vec3 vTint = mix(redTint, blueTint, side);
-      diskCol *= mix(vec3(1.0), vTint, 0.30*uCine);
+      baseCol *= mix(vec3(1.0), vTint, 0.28*uCine);
+      baseCol *= mix(0.52, 1.0, gred);
 
-      diskCol *= mix(0.52, 1.0, gred);
-      diskCol *= (0.48 + 1.85*structure) * uDiskI;
+      float layerHi = pow(layerDetail, 1.15);
+      float edgeHi = pow(clamp(1.0 - y/(thickness*1.55 + 1e-4), 0.0, 1.0), 3.0);
+      float spec = edgeHi * (0.35 + 0.65*layerHi);
+      vec3 hiCol = mix(vec3(2.2, 1.6, 0.8), vec3(1.4, 2.1, 2.4), uCine*side);
 
-      float innerGlow = exp(-pow((dr - rin) / (rs*0.115), 2.0));
-      diskCol += innerGlow * mix(vec3(2.1, 1.35, 0.48), vec3(1.4, 2.0, 2.3), uCine) * (0.30 + 0.85*structure) * uDiskI;
+      vec3 emit = baseCol * (0.45 + 2.05*structure);
+      emit += hiCol * (0.25 + 0.65*uCine) * spec;
+      emit *= uDiskI;
 
-      float flick = fbm(q*22.0 + vec2(t*2.05, -t*1.38) + uSeed);
-      diskCol *= 1.0 + anom*(0.20*(flick - 0.45));
+      float tau = (0.65 + 1.8*heat) * dens * (0.8 + 1.4*nearH);
+      float farSide = step(0.0, q.y) * smoothstep(radians(25.0), radians(82.0), inc);
+      tau *= mix(1.0, 1.55, farSide);
+      float trans = exp(-tau);
 
+      float phase = mix(0.55, 1.10, side) * (0.75 + 0.25*uCine);
+      vec3 scatterCol = mix(baseCol, hiCol, 0.40) * phase;
+
+      vec3 diskCol = emit * (1.0 - trans) + scatterCol * (0.20*(1.0-trans));
       diskCol *= diskMask * beam;
+
+      float innerGlow = exp(-pow((dr - rin) / (rs*0.110), 2.0));
+      diskCol += innerGlow * mix(vec3(2.2, 1.35, 0.48), vec3(1.4, 2.1, 2.4), uCine) * (0.30 + 0.95*structure) * uDiskI;
+
       col += diskCol;
 
-      // secondary lensed disk image (helps create the extra ring)
+      // secondary lensed disk image
       vec2 q2 = q;
       q2.y = -q2.y;
       float dr2 = length(q2);
       float dphi2 = atan(q2.y, q2.x);
-      float band2 = exp(-pow(abs(q2.y) / (thickness*0.85 + 1e-4), 1.35));
-      float disk2 = band2;
+      float y2 = abs(q2.y);
+      float dens2 = exp(-pow(y2/(thickness*0.95 + 1e-4), 1.25));
+      float disk2 = dens2;
       disk2 *= smoothstep(rin, rin + rs*0.20, dr2);
       disk2 *= 1.0 - smoothstep(rout - rs*0.28, rout, dr2);
       float beta2 = clamp(0.80 * sqrt(rin / max(dr2, rin)), 0.0, 0.86);
@@ -443,20 +909,20 @@
 
       float lr2 = log(max(1e-3, dr2/rs));
       float bands2 = 0.0;
-      bands2 += 0.5 + 0.5*sin(lr2*24.0 + t*0.78 + uSeed*1.2);
+      bands2 += 0.5 + 0.5*sin(lr2*26.0 + t*0.78 + uSeed*1.2);
       bands2 += 0.5 + 0.5*sin(lr2*44.0 - t*1.10 + uSeed*2.6);
       bands2 = pow(clamp(bands2*0.5, 0.0, 1.0), 2.0);
 
       vec3 diskCol2 = mix(ember, warm, pow(smoothstep(rout, rin, dr2), 0.85));
       diskCol2 = mix(diskCol2, hot, pow(smoothstep(rout, rin, dr2), 2.6));
-      diskCol2 *= mix(vec3(1.0), mix(redTint, blueTint, side2), 0.30*uCine);
+      diskCol2 *= mix(vec3(1.0), mix(redTint, blueTint, side2), 0.28*uCine);
       diskCol2 *= mix(0.55, 1.0, g2);
-      diskCol2 *= (0.45 + 1.25*bands2) * beam2 * uDiskI;
+      diskCol2 *= (0.40 + 1.40*bands2) * beam2 * uDiskI;
 
       float arcMix = pow(nearH, 2.0) * smoothstep(rs*1.35, rs*0.95, r);
-      col += diskCol2 * disk2 * (0.40 + 0.60*arcMix) * arcMix;
+      col += diskCol2 * disk2 * (0.38 + 0.62*arcMix) * arcMix;
 
-      // ----- in-shader sparks (always in tune with lensing) -----
+      // sparks
       if(uSparksOn > 0.5){
         vec2 pol = vec2(dphi, dr/rs);
         float gate = diskMask;
@@ -480,24 +946,22 @@
         col += sparks * sparkCol * uSparkAmt;
       }
 
-      // ----- Photon ring + corona -----
-      float ring = exp(-pow((r - photon) / (rs*0.085), 2.0));
-      ring *= 0.35 + 0.65*fbm(vec2(phi*6.0, r*26.0) + vec2(t*0.95, -t*0.75) + uSeed);
+      // photon ring + micro-caustics
+      float ring = exp(-pow((r - photon) / (rs*0.082), 2.0));
+      float micro = 0.5 + 0.5*sin(phi*120.0 + fbm(vec2(phi*12.0, r*28.0) + uSeed)*9.0 + t*0.6);
+      micro = pow(micro, 2.2);
+      ring *= 0.55 + 0.45*micro;
 
-      vec3 ringCol = mix(vec3(1.55, 1.20, 0.65), vec3(0.75, 1.10, 1.95), uCine);
+      vec3 ringCol = mix(vec3(1.55, 1.20, 0.65), vec3(0.78, 1.10, 1.95), uCine);
       ringCol *= mix(vec3(1.05,0.95,0.90), vec3(0.85,1.05,1.35), side*uCine);
-      col += ring * ringCol * (1.0 + 0.35*uCine);
+      col += ring * ringCol * (1.0 + 0.45*uCine);
 
       float edge = smoothstep(shadow + rs*0.08, shadow - rs*0.02, r);
-
-      // swallow light near the shadow edge
       col *= 1.0 - 0.94*edge;
 
-      // black core
       float core = smoothstep(rs*1.02, rs*0.98, r);
       col = mix(col, vec3(0.0), core);
 
-      // warm corona halo
       float halo = exp(-pow((r - shadow) / (rs*0.16), 2.0));
       float haloFine = fbm(vec2(phi*3.0, r*14.0) + vec2(t*0.3, -t*0.22) + uSeed*0.3);
       col += halo * mix(vec3(0.24, 0.19, 0.14), vec3(0.14, 0.22, 0.36), uCine) * (0.5 + 0.5*haloFine) * (0.85 + 0.65*uCine);
@@ -505,12 +969,12 @@
       float vig = smoothstep(1.50, 0.22, length((vUv-0.5)*vec2(aspect,1.0)));
       col *= 0.70 + 0.30*vig;
 
-      col = min(col, vec3(10.0));
+      col = min(col, vec3(12.0));
       frag = vec4(col, 1.0);
     }
   `;
 
-  // ----- Post (bloom via mip LODs + filmic tonemap + subtle CA/grain) -----
+  // ----- Post (bloom + halation + auto exposure + dispersion + grade) -----
   const postFS = `#version 300 es
     precision highp float;
     out vec4 frag;
@@ -520,11 +984,17 @@
     uniform vec2 uRes;
     uniform float uTime;
     uniform float uBloom;
+    uniform float uHalation;
     uniform float uCine;
+    uniform float uAutoExp;
 
     uniform float uZoom;
     uniform vec2 uPan;
     uniform float uRs;
+
+    uniform vec3 uGrade;
+    uniform float uSat;
+    uniform float uContrast;
 
     float hash12(vec2 p){
       vec3 p3 = fract(vec3(p.xyx) * 0.1031);
@@ -541,8 +1011,15 @@
     void main(){
       vec2 uv = vUv;
 
-      // chromatic aberration (subtle)
-      float ca = 0.0018 * uCine;
+      float aspect = uRes.x / uRes.y;
+      vec2 p = (uv*2.0 - 1.0);
+      p.x *= aspect;
+      p = p / max(0.001, uZoom) + uPan;
+      float shadow = uRs*1.14;
+      float pr = length(p);
+
+      float lensF = smoothstep(shadow*5.5, shadow*1.3, pr) * uCine;
+      float ca = (0.0007 + 0.0022*lensF);
       vec2 d = (uv - 0.5);
       vec2 o = d * (0.65 + 0.35*length(d)) * ca;
 
@@ -551,15 +1028,35 @@
       base.g = texture(uScene, uv).g;
       base.b = texture(uScene, uv - o).b;
 
+      // auto exposure (cheap average via center mip)
+      float lod = clamp(log2(max(2.0, min(uRes.x, uRes.y))) - 4.0, 3.0, 8.0);
+      vec3 avg = textureLod(uScene, vec2(0.5), lod).rgb;
+      float lum = max(1e-4, dot(avg, vec3(0.2126,0.7152,0.0722)));
+      float exposure = clamp(0.55 / lum, 0.65, 2.15);
+      base *= mix(1.0, exposure, uAutoExp);
+
       // bloom from lower mips
       vec3 b2 = textureLod(uScene, uv, 2.0).rgb;
       vec3 b3 = textureLod(uScene, uv, 3.2).rgb;
       vec3 b4 = textureLod(uScene, uv, 4.4).rgb;
-      vec3 bloom = (b2*0.80 + b3*0.55 + b4*0.35);
+      vec3 bloom = (b2*0.85 + b3*0.55 + b4*0.35);
       bloom = max(bloom - 0.10, 0.0);
-      base += bloom * (0.65 * uBloom);
+      base += bloom * (0.70 * uBloom);
 
-      float v = smoothstep(0.95, 0.25, length((uv-0.5)*vec2(uRes.x/uRes.y,1.0)));
+      // halation
+      vec2 px = 1.0 / uRes;
+      vec3 h = vec3(0.0);
+      h += texture(uScene, uv + px*vec2( 2.0, 0.0)).rgb;
+      h += texture(uScene, uv + px*vec2(-2.0, 0.0)).rgb;
+      h += texture(uScene, uv + px*vec2( 0.0, 2.0)).rgb;
+      h += texture(uScene, uv + px*vec2( 0.0,-2.0)).rgb;
+      h *= 0.25;
+      float hl = max(0.0, dot(h, vec3(0.2126,0.7152,0.0722)) - 0.06);
+      vec3 warm = vec3(1.25, 0.85, 0.45);
+      base += warm * hl * (0.25*uHalation) * (0.55 + 0.45*uCine);
+
+      // vignette
+      float v = smoothstep(0.95, 0.25, length((uv-0.5)*vec2(aspect,1.0)));
       base *= mix(0.82, 1.0, v);
 
       // film grain
@@ -570,14 +1067,16 @@
       float grit = pow(hash12(uv*uRes*0.35 + uTime*9.0), 18.0) * uCine;
       base += grit * 0.10;
 
-      // Hard mask the black hole shadow so it stays perfectly black (even with bloom)
-      float aspect = uRes.x / uRes.y;
-      vec2 p = (uv*2.0 - 1.0);
-      p.x *= aspect;
-      p = p / max(0.001, uZoom) + uPan;
+      // grade (makes presets obviously different)
+      base *= uGrade;
+      float L = dot(base, vec3(0.2126,0.7152,0.0722));
+      base = mix(vec3(L), base, uSat);
+      // contrast around middle grey (0.18)
+      base = (base - 0.18) * uContrast + 0.18;
+      base = max(base, 0.0);
 
-      float shadow = uRs*1.14;
-      float hole = smoothstep(shadow*1.01, shadow*0.98, length(p));
+      // Hard mask the black hole shadow so it stays perfectly black
+      float hole = smoothstep(shadow*1.01, shadow*0.98, pr);
       base *= (1.0 - hole);
 
       vec3 outc = tonemapFilmic(base);
@@ -624,137 +1123,31 @@
     res: gl.getUniformLocation(progPost, 'uRes'),
     time: gl.getUniformLocation(progPost, 'uTime'),
     bloom: gl.getUniformLocation(progPost, 'uBloom'),
+    hala: gl.getUniformLocation(progPost, 'uHalation'),
     cine: gl.getUniformLocation(progPost, 'uCine'),
+    autoexp: gl.getUniformLocation(progPost, 'uAutoExp'),
     zoom: gl.getUniformLocation(progPost, 'uZoom'),
     pan: gl.getUniformLocation(progPost, 'uPan'),
     rs: gl.getUniformLocation(progPost, 'uRs'),
     scene: gl.getUniformLocation(progPost, 'uScene'),
+
+    grade: gl.getUniformLocation(progPost, 'uGrade'),
+    sat: gl.getUniformLocation(progPost, 'uSat'),
+    contrast: gl.getUniformLocation(progPost, 'uContrast'),
   };
 
-  // ---------- Camera / controls ----------
-  let zoom = parseFloat(zoomEl.value); // starts at ~1.4x for a wide, cinematic establishing view
-  let inc = parseFloat(incEl.value);
-  let bloomAmt = parseFloat(bloomEl.value);
-  let speed = parseFloat(speedEl.value);
+  // ---------- render targets ----------
+  let w=0, h=0, dpr=1, cssW=0, cssH=0;
+  let q = state.q;
 
-  let rs = parseFloat(massEl.value);
-  let diskI = parseFloat(diskIEl.value);
-  let routMul = parseFloat(diskREl.value);
-  let thick = parseFloat(thickEl.value);
-  let sparkAmt = parseFloat(sparkAmtEl.value);
-
-  let anomOn = anomEl.checked;
-  let sparksOn = sparksEl.checked;
-  let cineOn = cineEl.checked;
-
-  let panX = 0, panY = 0;
-  let drag = false;
-  let lastX = 0, lastY = 0;
-
-  function setLabels(){
-    zoomV.textContent = `${zoom.toFixed(2)}×`;
-    incV.textContent = `${Math.round(inc)}°`;
-    bloomV.textContent = `${bloomAmt.toFixed(2)}`;
-    speedV.textContent = `${speed.toFixed(2)}`;
-
-    massV.textContent = rs.toFixed(3);
-    diskIV.textContent = diskI.toFixed(2);
-    diskRV.textContent = routMul.toFixed(2);
-    thickV.textContent = thick.toFixed(3);
-    sparkV.textContent = sparkAmt.toFixed(2);
-  }
-  setLabels();
-
-  function resetView(){
-    zoom = 1.4;
-    inc = 68;
-    bloomAmt = 1.25;
-    speed = 1.0;
-
-    rs = 0.22;
-    diskI = 1.0;
-    routMul = 6.9;
-    thick = 0.074;
-    sparkAmt = 1.0;
-
-    panX = 0; panY = 0;
-
-    zoomEl.value = zoom;
-    incEl.value = inc;
-    bloomEl.value = bloomAmt;
-    speedEl.value = speed;
-
-    massEl.value = rs;
-    diskIEl.value = diskI;
-    diskREl.value = routMul;
-    thickEl.value = thick;
-    sparkAmtEl.value = sparkAmt;
-
-    setLabels();
-  }
-
-  function focusHorizon(){
-    zoom = 10.5;
-    panX = 0; panY = 0;
-    zoomEl.value = zoom;
-    setLabels();
-  }
-
-  zoomEl.addEventListener('input', () => { zoom = parseFloat(zoomEl.value); setLabels(); });
-  incEl.addEventListener('input', () => { inc = parseFloat(incEl.value); setLabels(); });
-  bloomEl.addEventListener('input', () => { bloomAmt = parseFloat(bloomEl.value); setLabels(); });
-  speedEl.addEventListener('input', () => { speed = parseFloat(speedEl.value); setLabels(); });
-
-  massEl.addEventListener('input', () => { rs = parseFloat(massEl.value); setLabels(); });
-  diskIEl.addEventListener('input', () => { diskI = parseFloat(diskIEl.value); setLabels(); });
-  diskREl.addEventListener('input', () => { routMul = parseFloat(diskREl.value); setLabels(); });
-  thickEl.addEventListener('input', () => { thick = parseFloat(thickEl.value); setLabels(); });
-  sparkAmtEl.addEventListener('input', () => { sparkAmt = parseFloat(sparkAmtEl.value); setLabels(); });
-
-  anomEl.addEventListener('change', () => { anomOn = anomEl.checked; });
-  sparksEl.addEventListener('change', () => { sparksOn = sparksEl.checked; });
-  cineEl.addEventListener('change', () => { cineOn = cineEl.checked; });
-
-  document.getElementById('toggleUI').addEventListener('click', () => {
-    const hidden = ui.style.display === 'none';
-    ui.style.display = hidden ? '' : 'none';
-    toggleUI.textContent = hidden ? 'Hide UI' : 'Show UI';
-  });
-
-  playBtn.addEventListener('click', () => {
-    paused = !paused;
-    playBtn.textContent = paused ? 'Play' : 'Pause';
-  });
-  resetBtn.addEventListener('click', resetView);
-  focusBtn.addEventListener('click', focusHorizon);
-
-  // Scroll / pinch zoom
-  window.addEventListener('wheel', (e) => {
-    e.preventDefault();
-    const dir = Math.sign(e.deltaY);
-    const factor = Math.exp(-dir * 0.08);
-    zoom = clamp(zoom * factor, parseFloat(zoomEl.min), parseFloat(zoomEl.max));
-    zoomEl.value = zoom;
-    setLabels();
-  }, { passive:false });
-
-  // ---------- Quality / resize ----------
-  let w=0, h=0, dpr=1, q=0.75;
-
-  // Offscreen scene target (for bloom/post)
-  let sceneTex = null, sceneFBO = null;
-  let useFloat = false;
-
+  let sceneTex=null, sceneFBO=null;
+  let useFloat=false;
   const extFloat = gl.getExtension('EXT_color_buffer_float');
-  const extHalfLinear = gl.getExtension('OES_texture_half_float_linear');
-  useFloat = !!(extFloat && extHalfLinear);
+  useFloat = !!extFloat;
 
-  function createSceneTarget(){
-    if(sceneTex) gl.deleteTexture(sceneTex);
-    if(sceneFBO) gl.deleteFramebuffer(sceneFBO);
-
-    sceneTex = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, sceneTex);
+  function createTexture(w, h, mipmap){
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
 
     const internalFormat = useFloat ? gl.RGBA16F : gl.RGBA8;
     const type = useFloat ? gl.HALF_FLOAT : gl.UNSIGNED_BYTE;
@@ -763,61 +1156,70 @@
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, mipmap ? gl.LINEAR_MIPMAP_LINEAR : gl.LINEAR);
 
-    sceneFBO = gl.createFramebuffer();
-    gl.bindFramebuffer(gl.FRAMEBUFFER, sceneFBO);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, sceneTex, 0);
-
-    const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
-    if(status !== gl.FRAMEBUFFER_COMPLETE){
-      // Fallback to RGBA8
-      useFloat = false;
-      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-      gl.deleteFramebuffer(sceneFBO);
-      gl.deleteTexture(sceneTex);
-      sceneTex = null; sceneFBO = null;
-
-      sceneTex = gl.createTexture();
-      gl.bindTexture(gl.TEXTURE_2D, sceneTex);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
-
-      sceneFBO = gl.createFramebuffer();
-      gl.bindFramebuffer(gl.FRAMEBUFFER, sceneFBO);
-      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, sceneTex, 0);
-    }
-
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.bindTexture(gl.TEXTURE_2D, null);
+    return tex;
+  }
+
+  function createFBO(tex){
+    const fbo = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    return fbo;
+  }
+
+  function createSceneTarget(){
+    if(sceneTex) gl.deleteTexture(sceneTex);
+    if(sceneFBO) gl.deleteFramebuffer(sceneFBO);
+    sceneTex = createTexture(w, h, true);
+    sceneFBO = createFBO(sceneTex);
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, sceneFBO);
+    const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+    if(status !== gl.FRAMEBUFFER_COMPLETE){
+      if(useFloat){
+        useFloat = false;
+        if(sceneTex) gl.deleteTexture(sceneTex);
+        if(sceneFBO) gl.deleteFramebuffer(sceneFBO);
+        sceneTex = createTexture(w, h, true);
+        sceneFBO = createFBO(sceneTex);
+      }
+    }
   }
 
   function resize(){
-    const cssW = Math.max(1, Math.floor(window.innerWidth));
-    const cssH = Math.max(1, Math.floor(window.innerHeight));
+    cssW = Math.max(1, Math.floor(window.innerWidth));
+    cssH = Math.max(1, Math.floor(window.innerHeight));
     dpr = Math.min(2.0, window.devicePixelRatio || 1);
-    q = parseFloat(qEl.value);
+    q = clamp(state.q, 0.35, 1.0);
+
     w = Math.max(2, Math.floor(cssW * dpr * q));
     h = Math.max(2, Math.floor(cssH * dpr * q));
     canvas.width = w;
     canvas.height = h;
     canvas.style.width = cssW + 'px';
     canvas.style.height = cssH + 'px';
+
     gl.viewport(0,0,w,h);
     createSceneTarget();
   }
-  qEl.addEventListener('change', resize);
+
   window.addEventListener('resize', resize);
   resize();
 
-  // Drag to pan (in scene units)
+  // ---------- camera controls (pan) ----------
+  let drag = false;
+  let lastX = 0, lastY = 0;
+
   function pointerPos(ev){
     const rect = canvas.getBoundingClientRect();
     return { x: (ev.clientX - rect.left), y: (ev.clientY - rect.top) };
   }
+
   canvas.addEventListener('pointerdown', (e) => {
     drag = true;
     canvas.setPointerCapture(e.pointerId);
@@ -838,39 +1240,140 @@
     const aspect = w / h;
     const sx = (dx / w) * 2.0 * aspect;
     const sy = (dy / h) * 2.0;
-    panX -= sx / zoom;
-    panY += sy / zoom;
+    state.px -= sx / Math.max(0.001, state.zoom);
+    state.py += sy / Math.max(0.001, state.zoom);
+    scheduleHashWrite();
   });
 
-  // ---------- Seed ----------
-  let seedStr = (location.hash.match(/seed=([^&]+)/)?.[1] || '').trim();
-  if(!seedStr) seedStr = String(Math.floor(Math.random()*1e9));
+  // ---------- snapshot (2x) ----------
+  async function snapshot(scale){
+    const snap = {};
+    for(const k of LIVE_KEYS) snap[k] = live[k];
 
-  // declared before use
-  let uSeedVal = 0.0;
+    const maxSide = 4096;
+    const outW = Math.min(maxSide, Math.max(2, Math.floor(cssW * scale)));
+    const outH = Math.min(maxSide, Math.max(2, Math.floor(cssH * scale)));
 
-  function setSeed(str){
-    seedStr = str;
-    const h = xmur3(seedStr);
-    const a = h();
-    const b = h();
-    uSeedVal = (a/4294967296)*1000.0 + (b/4294967296)*0.001;
+    const tmpSceneTex = createTexture(outW, outH, true);
+    const tmpSceneFBO = createFBO(tmpSceneTex);
 
-    const params = new URLSearchParams(location.hash.replace(/^#/,''));
-    params.set('seed', seedStr);
-    history.replaceState(null,'', '#'+params.toString());
+    const tmpOutTex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tmpOutTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, outW, outH, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    const tmpOutFBO = createFBO(tmpOutTex);
+
+    const t = paused ? tHold : now();
+    const time = t;
+
+    const driftAmt = snap.drift;
+    const cineAmt = snap.cine;
+
+    const driftZ = 1.0 + driftAmt*(0.010*Math.sin(time*0.35) + 0.006*Math.sin(time*0.12 + 1.3));
+    const driftPX = driftAmt*(0.004*Math.sin(time*0.19 + 0.7));
+    const driftPY = driftAmt*(0.003*Math.sin(time*0.23 + 1.9));
+
+    const z = snap.zoom * driftZ;
+
+    // pass 1
+    gl.bindFramebuffer(gl.FRAMEBUFFER, tmpSceneFBO);
+    gl.viewport(0,0,outW,outH);
+    gl.disable(gl.BLEND);
+
+    gl.useProgram(progBH);
+    gl.bindVertexArray(quad);
+    gl.uniform2f(U.res, outW, outH);
+    gl.uniform1f(U.time, time);
+    gl.uniform1f(U.zoom, z);
+    gl.uniform1f(U.inc, snap.inc);
+    gl.uniform1f(U.seed, uSeedVal);
+    gl.uniform2f(U.pan, snap.px + driftPX, snap.py + driftPY);
+    gl.uniform1f(U.speed, snap.speed);
+    gl.uniform1f(U.anom, snap.anom);
+    gl.uniform1f(U.cine, cineAmt);
+    gl.uniform1f(U.rs, snap.mass);
+    gl.uniform1f(U.diskI, snap.diskI);
+    gl.uniform1f(U.rout, snap.diskR);
+    gl.uniform1f(U.thick, snap.thick);
+    gl.uniform1f(U.sparkAmt, snap.sparkAmt);
+    gl.uniform1f(U.sparksOn, snap.sparks);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    gl.bindVertexArray(null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+    gl.bindTexture(gl.TEXTURE_2D, tmpSceneTex);
+    gl.generateMipmap(gl.TEXTURE_2D);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+
+    // pass 2
+    gl.bindFramebuffer(gl.FRAMEBUFFER, tmpOutFBO);
+    gl.viewport(0,0,outW,outH);
+    gl.useProgram(progPost);
+    gl.bindVertexArray(quad);
+
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, tmpSceneTex);
+    gl.uniform1i(P.scene, 0);
+    gl.uniform2f(P.res, outW, outH);
+    gl.uniform1f(P.time, time);
+    gl.uniform1f(P.bloom, snap.bloom);
+    gl.uniform1f(P.hala, snap.hala);
+    gl.uniform1f(P.cine, cineAmt);
+    gl.uniform1f(P.autoexp, snap.autoexp);
+    gl.uniform1f(P.zoom, z);
+    gl.uniform2f(P.pan, snap.px + driftPX, snap.py + driftPY);
+    gl.uniform1f(P.rs, snap.mass);
+    gl.uniform3f(P.grade, snap.gradeR, snap.gradeG, snap.gradeB);
+    gl.uniform1f(P.sat, snap.sat);
+    gl.uniform1f(P.contrast, snap.contrast);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+    gl.bindVertexArray(null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+    // read pixels
+    const pixels = new Uint8Array(outW*outH*4);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, tmpOutFBO);
+    gl.readPixels(0,0,outW,outH, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+    // cleanup
+    gl.deleteFramebuffer(tmpSceneFBO);
+    gl.deleteTexture(tmpSceneTex);
+    gl.deleteFramebuffer(tmpOutFBO);
+    gl.deleteTexture(tmpOutTex);
+
+    // flip Y and download
+    const cnv = document.createElement('canvas');
+    cnv.width = outW;
+    cnv.height = outH;
+    const ctx = cnv.getContext('2d');
+    const img = ctx.createImageData(outW, outH);
+
+    for(let y=0;y<outH;y++){
+      const srcRow = (outH-1-y) * outW * 4;
+      const dstRow = y * outW * 4;
+      img.data.set(pixels.subarray(srcRow, srcRow + outW*4), dstRow);
+    }
+    ctx.putImageData(img, 0, 0);
+
+    const blob = await new Promise(res => cnv.toBlob(res, 'image/png'));
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `black-hole_${state.preset}_seed-${state.seed}_${outW}x${outH}.png`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
   }
 
-  setSeed(seedStr);
-  randomBtn.addEventListener('click', () => setSeed(String(Math.floor(Math.random()*1e9))));
+  shotBtn.addEventListener('click', () => snapshot(2));
 
-  // ---------- lightweight self-tests (non-throwing) ----------
-  (function runSelfTests(){
-    console.assert(typeof uSeedVal === 'number' && Number.isFinite(uSeedVal), 'SelfTest: uSeedVal should be a finite number');
-    console.assert(sceneFBO !== null && sceneTex !== null, 'SelfTest: scene target should be created');
-  })();
-
-  // ---------- Render loop ----------
+  // ---------- main loop ----------
   let tHold = now();
   let last = tHold;
   let fpsAcc=0, fpsN=0, fpsLast=performance.now();
@@ -881,6 +1384,12 @@
     const t = now();
     const dt = clamp(t - last, 0.0, 0.05);
     last = t;
+
+    // Smoothly approach state values
+    const a = 1.0 - Math.exp(-dt * 10.0);
+    for(const k of LIVE_KEYS){
+      live[k] += (state[k] - live[k]) * a;
+    }
 
     // FPS
     const ms = performance.now();
@@ -895,7 +1404,16 @@
     const time = paused ? tHold : t;
     if(!paused) tHold = time;
 
-    // ----- PASS 1: render to scene texture -----
+    const driftAmt = live.drift;
+    const cineAmt = live.cine;
+
+    const driftZ = 1.0 + driftAmt*(0.010*Math.sin(time*0.35) + 0.006*Math.sin(time*0.12 + 1.3));
+    const driftPX = driftAmt*(0.004*Math.sin(time*0.19 + 0.7));
+    const driftPY = driftAmt*(0.003*Math.sin(time*0.23 + 1.9));
+
+    const z = live.zoom * driftZ;
+
+    // PASS 1
     gl.bindFramebuffer(gl.FRAMEBUFFER, sceneFBO);
     gl.viewport(0,0,w,h);
     gl.disable(gl.BLEND);
@@ -905,31 +1423,30 @@
 
     gl.uniform2f(U.res, w, h);
     gl.uniform1f(U.time, time);
-    gl.uniform1f(U.zoom, zoom);
-    gl.uniform1f(U.inc, inc);
+    gl.uniform1f(U.zoom, z);
+    gl.uniform1f(U.inc, live.inc);
     gl.uniform1f(U.seed, uSeedVal);
-    gl.uniform2f(U.pan, panX, panY);
-    gl.uniform1f(U.speed, speed);
-    gl.uniform1f(U.anom, anomOn ? 1.0 : 0.0);
-    gl.uniform1f(U.cine, cineOn ? 1.0 : 0.0);
+    gl.uniform2f(U.pan, live.px + driftPX, live.py + driftPY);
+    gl.uniform1f(U.speed, live.speed);
+    gl.uniform1f(U.anom, live.anom);
+    gl.uniform1f(U.cine, cineAmt);
 
-    gl.uniform1f(U.rs, rs);
-    gl.uniform1f(U.diskI, diskI);
-    gl.uniform1f(U.rout, routMul);
-    gl.uniform1f(U.thick, thick);
-    gl.uniform1f(U.sparkAmt, sparkAmt);
-    gl.uniform1f(U.sparksOn, sparksOn ? 1.0 : 0.0);
+    gl.uniform1f(U.rs, live.mass);
+    gl.uniform1f(U.diskI, live.diskI);
+    gl.uniform1f(U.rout, live.diskR);
+    gl.uniform1f(U.thick, live.thick);
+    gl.uniform1f(U.sparkAmt, live.sparkAmt);
+    gl.uniform1f(U.sparksOn, live.sparks);
 
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     gl.bindVertexArray(null);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
-    // Mips for bloom
     gl.bindTexture(gl.TEXTURE_2D, sceneTex);
     gl.generateMipmap(gl.TEXTURE_2D);
     gl.bindTexture(gl.TEXTURE_2D, null);
 
-    // ----- PASS 2: post to screen -----
+    // PASS 2
     gl.viewport(0,0,w,h);
     gl.disable(gl.BLEND);
     gl.useProgram(progPost);
@@ -941,36 +1458,26 @@
 
     gl.uniform2f(P.res, w, h);
     gl.uniform1f(P.time, time);
-    gl.uniform1f(P.bloom, bloomAmt);
-    gl.uniform1f(P.cine, cineOn ? 1.0 : 0.0);
-    gl.uniform1f(P.zoom, zoom);
-    gl.uniform2f(P.pan, panX, panY);
-    gl.uniform1f(P.rs, rs);
+    gl.uniform1f(P.bloom, live.bloom);
+    gl.uniform1f(P.hala, live.hala);
+    gl.uniform1f(P.cine, cineAmt);
+    gl.uniform1f(P.autoexp, live.autoexp);
+    gl.uniform1f(P.zoom, z);
+    gl.uniform2f(P.pan, live.px + driftPX, live.py + driftPY);
+    gl.uniform1f(P.rs, live.mass);
+
+    gl.uniform3f(P.grade, live.gradeR, live.gradeG, live.gradeB);
+    gl.uniform1f(P.sat, live.sat);
+    gl.uniform1f(P.contrast, live.contrast);
 
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     gl.bindVertexArray(null);
   }
 
+  // start
+  scheduleHashWrite();
   step();
 
-  // ---------- UI / hotkeys ----------
-  toggleUI.addEventListener('click', () => {
-    const hidden = ui.style.display === 'none';
-    ui.style.display = hidden ? '' : 'none';
-    toggleUI.textContent = hidden ? 'Hide UI' : 'Show UI';
-  });
-
-  window.addEventListener('keydown', (e) => {
-    const k = e.key.toLowerCase();
-    if(e.code === 'Space'){
-      e.preventDefault();
-      paused = !paused;
-      playBtn.textContent = paused ? 'Play' : 'Pause';
-    }
-    if(k === 'r') resetView();
-    if(k === 'f') focusHorizon();
-    if(k === 'h') toggleUI.click();
-  });
 })();
 </script>
 </body>
