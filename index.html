@@ -21,7 +21,7 @@
       backdrop-filter: blur(8px);
       -webkit-backdrop-filter: blur(8px);
       user-select:none;
-      max-width:min(440px, calc(100vw - 24px));
+      max-width:min(560px, calc(100vw - 24px));
     }
     #ui .row{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
     #ui .row.tight{ gap:6px; }
@@ -58,6 +58,7 @@
   <button id="toggleUI" class="pill">Hide UI</button>
   <div id="ui">
     <h1>Cinematic Golden Black Hole</h1>
+
     <div class="row">
       <button id="play">Pause</button>
       <button id="focus">Focus horizon</button>
@@ -65,21 +66,35 @@
       <button id="random">New seed</button>
       <span class="pill" id="fps">— fps</span>
     </div>
+
     <div class="row tight">
       <label><input id="anom" type="checkbox" checked /> Horizon anomalies</label>
-      <label><input id="parts" type="checkbox" checked /> Particles</label>
+      <label><input id="sparks" type="checkbox" checked /> Horizon sparks</label>
       <label><input id="cine" type="checkbox" checked /> Cinematic</label>
     </div>
+
     <div class="row">
       <label>Zoom <input id="zoom" type="range" min="0.55" max="18" step="0.01" value="1.4" /> <span class="pill" id="zoomV">1.40×</span></label>
-    </div>
-    <div class="row">
       <label>Inclination <input id="inc" type="range" min="0" max="82" step="1" value="68" /> <span class="pill" id="incV">68°</span></label>
     </div>
+
+    <div class="row">
+      <label>Mass <input id="mass" type="range" min="0.14" max="0.34" step="0.001" value="0.22" /> <span class="pill" id="massV">0.220</span></label>
+      <label>Lens <input id="lens" type="range" min="0.6" max="1.6" step="0.01" value="1.05" /> <span class="pill" id="lensV">1.05</span></label>
+    </div>
+
+    <div class="row">
+      <label>Disk intensity <input id="diskI" type="range" min="0" max="2.8" step="0.01" value="1.0" /> <span class="pill" id="diskIV">1.00</span></label>
+      <label>Disk radius <input id="diskR" type="range" min="4.5" max="10.5" step="0.01" value="6.9" /> <span class="pill" id="diskRV">6.90</span></label>
+    </div>
+
+    <div class="row">
+      <label>Disk thickness <input id="thick" type="range" min="0.04" max="0.16" step="0.001" value="0.074" /> <span class="pill" id="thickV">0.074</span></label>
+      <label>Sparks <input id="sparkAmt" type="range" min="0" max="2.2" step="0.01" value="1.0" /> <span class="pill" id="sparkV">1.00</span></label>
+    </div>
+
     <div class="row">
       <label>Bloom <input id="bloom" type="range" min="0" max="2.4" step="0.01" value="1.25" /> <span class="pill" id="bloomV">1.25</span></label>
-    </div>
-    <div class="row">
       <label>Speed <input id="speed" type="range" min="0" max="1.8" step="0.01" value="1" /> <span class="pill" id="speedV">1.00</span></label>
       <label class="muted">Quality
         <select id="q">
@@ -90,6 +105,7 @@
         </select>
       </label>
     </div>
+
     <div id="help" class="muted">
       Drag to pan · wheel/trackpad to zoom · Space = pause · H = toggle UI · F = focus
     </div>
@@ -101,10 +117,9 @@
 
   // ---------- tiny utils ----------
   const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
-  const lerp = (a,b,t)=>a+(b-a)*t;
   const now = ()=>performance.now()*0.001;
 
-  // Deterministic RNG
+  // Deterministic RNG hash
   function xmur3(str){
     let h=1779033703^str.length;
     for(let i=0;i<str.length;i++){
@@ -115,18 +130,6 @@
       h=Math.imul(h^(h>>>16),2246822507);
       h=Math.imul(h^(h>>>13),3266489909);
       return (h^=h>>>16)>>>0;
-    };
-  }
-  function sfc32(a,b,c,d){
-    return function(){
-      a|=0; b|=0; c|=0; d|=0;
-      let t=(a+b|0)+d|0;
-      d=d+1|0;
-      a=b^(b>>>9);
-      b=c+(c<<3)|0;
-      c=(c<<21|c>>>11);
-      c=c+t|0;
-      return (t>>>0)/4294967296;
     };
   }
 
@@ -149,8 +152,22 @@
   const speedEl = document.getElementById('speed');
   const speedV = document.getElementById('speedV');
   const qEl = document.getElementById('q');
+
+  const massEl = document.getElementById('mass');
+  const massV = document.getElementById('massV');
+  const lensEl = document.getElementById('lens');
+  const lensV = document.getElementById('lensV');
+  const diskIEl = document.getElementById('diskI');
+  const diskIV = document.getElementById('diskIV');
+  const diskREl = document.getElementById('diskR');
+  const diskRV = document.getElementById('diskRV');
+  const thickEl = document.getElementById('thick');
+  const thickV = document.getElementById('thickV');
+  const sparkAmtEl = document.getElementById('sparkAmt');
+  const sparkV = document.getElementById('sparkV');
+
   const anomEl = document.getElementById('anom');
-  const partsEl = document.getElementById('parts');
+  const sparksEl = document.getElementById('sparks');
   const cineEl = document.getElementById('cine');
 
   let paused = false;
@@ -212,6 +229,14 @@
     uniform float uAnom;
     uniform float uCine;
 
+    uniform float uRs;
+    uniform float uLens;
+    uniform float uDiskI;
+    uniform float uRoutMul;
+    uniform float uThick;
+    uniform float uSparkAmt;
+    uniform float uSparksOn;
+
     float hash12(vec2 p){
       vec3 p3 = fract(vec3(p.xyx) * 0.1031);
       p3 += dot(p3, p3.yzx + 33.33);
@@ -251,6 +276,21 @@
       return pow(1.0/denom, 3.1);
     }
 
+    float sparkLayer(vec2 pol, float t, float seed, float gridA, float gridR, float keep, float sharp){
+      vec2 g = vec2(pol.x*gridA, pol.y*gridR + t);
+      vec2 i = floor(g);
+      vec2 f = fract(g);
+      float h = hash12(i + seed);
+      vec2 off = vec2(hash12(i + seed + 11.7), hash12(i + seed + 27.3));
+      vec2 p = 0.5 + (off - 0.5) * 0.65;
+      vec2 d = (f - p);
+      d.x *= 1.2;
+      float dist2 = dot(d,d);
+      float s = exp(-dist2 * sharp);
+      float tw = 0.55 + 0.45*sin(t*7.0 + h*10.0);
+      return s * tw * step(keep, h);
+    }
+
     void main(){
       vec2 p = (vUv*2.0 - 1.0);
       float aspect = uRes.x / uRes.y;
@@ -259,8 +299,7 @@
       // camera space (pan/zoom)
       p = p / max(0.001, uZoom) + uPan;
 
-      // Schwarzschild radius-ish (stylized)
-      float rs = 0.22;
+      float rs = uRs;
       float shadow = rs*1.14;
       float photon = rs*1.58;
 
@@ -270,27 +309,25 @@
       float r = length(p);
       float phi = atan(p.y, p.x);
 
-      // near-horizon influence
       float nearH = 1.0 - smoothstep(rs*1.2, rs*4.8, r);
       float anom = uAnom * nearH;
 
-      // lensing deflection (simple, but pushed to feel more "Interstellar")
+      // lensing deflection
       float def = (rs*rs) / (r*r + 0.004);
       def *= smoothstep(rs*0.95, rs*7.5, r);
       def *= mix(0.82, 1.05, uCine);
+      def *= uLens;
 
       // micro-caustics shimmer near horizon
       float shimmer = (fbm(p*18.0 + vec2(0.0, t*0.55) + uSeed) - 0.5);
       def *= 1.0 + anom*(0.26*shimmer);
 
-      // warped coordinate
       vec2 lp = rot(p, def);
       lp *= (1.0 + def*0.24);
 
       vec3 col = vec3(0.0);
 
       // ----- Deep background (stars + nebula) -----
-      // Stars: keep crisp, with subtle lensing magnification.
       vec2 sp = lp*1.75;
       float s = 0.0;
       for(int i=0;i<3;i++){
@@ -304,7 +341,6 @@
         sp = rot(sp, 1.15);
       }
 
-      // Nebula: two layers for depth.
       float neb1 = fbm(lp*1.2 + vec2(t*0.012, -t*0.010) + uSeed*0.13);
       float neb2 = fbm(lp*2.4 + vec2(-t*0.006, t*0.008) + uSeed*0.31);
       float neb = pow(clamp(0.55*neb1 + 0.45*neb2, 0.0, 1.0), 2.15);
@@ -328,9 +364,9 @@
       float dphi = atan(q.y, q.x);
 
       float rin = rs*1.22;
-      float rout = rs*6.9;
+      float rout = rs*uRoutMul;
 
-      float thickness = 0.074 + 0.055*fbm(vec2(dphi*1.6, dr*9.4) + vec2(t*0.62, -t*0.28) + uSeed);
+      float thickness = uThick + 0.055*fbm(vec2(dphi*1.6, dr*9.4) + vec2(t*0.62, -t*0.28) + uSeed);
       thickness *= 1.0 + anom*1.0;
 
       float band = exp(-pow(abs(q.y) / (thickness + 1e-4), 1.30));
@@ -348,7 +384,7 @@
       float vlos = sin(dphi) * sin(inc);
       float beam = doppler(beta, vlos);
 
-      float g = sqrt(max(0.0, 1.0 - rs / max(dr, rs*1.02))); // gravitational redshift-ish
+      float gred = sqrt(max(0.0, 1.0 - rs / max(dr, rs*1.02)));
 
       vec3 hot  = vec3(1.95, 1.25, 0.42);
       vec3 warm = vec3(1.25, 0.68, 0.20);
@@ -358,15 +394,14 @@
       vec3 diskCol = mix(ember, warm, pow(heat, 0.82));
       diskCol = mix(diskCol, hot,  pow(heat, 2.75));
 
-      // approaching side: a hint of whitening/blueing for cinematic punch
       vec3 beamTint = mix(vec3(1.0), vec3(1.06, 1.03, 1.00), clamp(beam*0.10, 0.0, 1.0));
       diskCol *= beamTint;
 
-      diskCol *= mix(0.52, 1.0, g);
-      diskCol *= 0.62 + 1.35*structure;
+      diskCol *= mix(0.52, 1.0, gred);
+      diskCol *= (0.62 + 1.35*structure) * uDiskI;
 
       float innerGlow = exp(-pow((dr - rin) / (rs*0.115), 2.0));
-      diskCol += innerGlow * vec3(2.1, 1.35, 0.48) * (0.35 + 0.70*structure);
+      diskCol += innerGlow * vec3(2.1, 1.35, 0.48) * (0.35 + 0.70*structure) * uDiskI;
 
       float flick = fbm(q*22.0 + vec2(t*2.05, -t*1.38) + uSeed);
       diskCol *= 1.0 + anom*(0.20*(flick - 0.45));
@@ -374,8 +409,7 @@
       diskCol *= diskMask * beam;
       col += diskCol;
 
-      // "secondary" lensed disk image (suggests the famous top/bottom arc)
-      // Not physically exact, but produces the cinematic double-band feel.
+      // secondary lensed disk image
       vec2 q2 = q;
       q2.y = -q2.y;
       float dr2 = length(q2);
@@ -392,10 +426,33 @@
       vec3 diskCol2 = mix(ember, warm, pow(smoothstep(rout, rin, dr2), 0.85));
       diskCol2 = mix(diskCol2, hot, pow(smoothstep(rout, rin, dr2), 2.6));
       diskCol2 *= mix(0.55, 1.0, g2);
-      diskCol2 *= (0.55 + 1.10*structure2) * beam2;
+      diskCol2 *= (0.55 + 1.10*structure2) * beam2 * uDiskI;
 
       float arcMix = pow(nearH, 2.0) * smoothstep(rs*1.35, rs*0.95, r);
       col += diskCol2 * disk2 * (0.45 + 0.55*arcMix) * arcMix;
+
+      // ----- in-shader sparks (always in tune with lensing) -----
+      if(uSparksOn > 0.5){
+        vec2 pol = vec2(dphi, dr/rs);
+        float gate = diskMask;
+        gate *= smoothstep(1.08, 1.45, pol.y);
+        gate *= 1.0 - smoothstep(3.4, 4.8, pol.y);
+
+        float nh = 1.0 - smoothstep(rs*1.05, rs*2.4, dr);
+        float dust = pow(max(0.0, fbm(vec2(dphi*10.0, pol.y*7.5) + vec2(t*0.9, -t*0.4) + uSeed*2.0) - 0.56), 1.7);
+
+        float L1 = sparkLayer(vec2(dphi, pol.y), t*0.75, uSeed*7.1, 18.0, 6.0, 0.93, 56.0);
+        float L2 = sparkLayer(vec2(dphi, pol.y), t*1.05, uSeed*9.3, 28.0, 8.5, 0.955, 92.0);
+        float L3 = sparkLayer(vec2(dphi, pol.y), t*0.55, uSeed*4.9, 12.0, 5.0, 0.90, 42.0);
+
+        float sparks = (L1*0.65 + L2*0.85 + L3*0.45);
+        sparks += dust * (0.45 + 0.55*nh);
+
+        float edge = smoothstep(shadow + rs*0.08, shadow - rs*0.02, r);
+        sparks *= gate * (1.0 - edge);
+
+        col += sparks * vec3(2.0, 1.55, 0.75) * uSparkAmt;
+      }
 
       // ----- Photon ring + corona -----
       float ring = exp(-pow((r - photon) / (rs*0.085), 2.0));
@@ -414,42 +471,11 @@
       float haloFine = fbm(vec2(phi*3.0, r*14.0) + vec2(t*0.3, -t*0.22) + uSeed*0.3);
       col += halo * vec3(0.24, 0.19, 0.14) * (0.5 + 0.5*haloFine) * (0.85 + 0.65*uCine);
 
-      // vignette (mild; post also adds)
-      float v = smoothstep(1.50, 0.22, length((vUv-0.5)*vec2(aspect,1.0)));
-      col *= 0.70 + 0.30*v;
+      float vig = smoothstep(1.50, 0.22, length((vUv-0.5)*vec2(aspect,1.0)));
+      col *= 0.70 + 0.30*vig;
 
-      // keep within a sane HDR-ish range (especially for RGBA8 fallback)
       col = min(col, vec3(8.0));
       frag = vec4(col, 1.0);
-    }
-  `;
-
-  // ----- Particles (drawn into scene FBO; bloom loves these) -----
-  const particlesVS = `#version 300 es
-    precision highp float;
-    layout(location=0) in vec2 aPos;
-    layout(location=1) in float aSize;
-    layout(location=2) in float aAlpha;
-    uniform vec2 uRes;
-    out float vAlpha;
-    void main(){
-      vAlpha = aAlpha;
-      vec2 p = aPos;
-      vec2 ndc = vec2((p.x / uRes.x) * 2.0 - 1.0, (p.y / uRes.y) * 2.0 - 1.0);
-      gl_Position = vec4(ndc, 0.0, 1.0);
-      gl_PointSize = aSize;
-    }
-  `;
-
-  const particlesFS = `#version 300 es
-    precision highp float;
-    in float vAlpha;
-    out vec4 frag;
-    void main(){
-      vec2 p = gl_PointCoord*2.0 - 1.0;
-      float d = dot(p,p);
-      float a = exp(-d*2.1) * vAlpha;
-      frag = vec4(1.0, 0.88, 0.44, a);
     }
   `;
 
@@ -465,9 +491,9 @@
     uniform float uBloom;
     uniform float uCine;
 
-    // for hard black-hole masking in post (prevents bloom/grain from lighting the core)
     uniform float uZoom;
     uniform vec2 uPan;
+    uniform float uRs;
 
     float hash12(vec2 p){
       vec3 p3 = fract(vec3(p.xyx) * 0.1031);
@@ -477,14 +503,12 @@
 
     vec3 tonemapFilmic(vec3 x){
       x = max(x, 0.0);
-      // A small cinematic shoulder; tuned to keep golds rich.
       x = (x*(2.20*x + 0.05)) / (x*(2.20*x + 1.20) + 0.05);
       return x;
     }
 
     void main(){
       vec2 uv = vUv;
-      vec2 px = 1.0 / max(uRes, vec2(1.0));
 
       // chromatic aberration (subtle)
       float ca = 0.0016 * uCine;
@@ -496,18 +520,14 @@
       base.g = texture(uScene, uv).g;
       base.b = texture(uScene, uv - o).b;
 
-      // bloom from lower mips (cheap and fast)
-      // (works best with float FBO, but still nice on RGBA8)
+      // bloom from lower mips
       vec3 b2 = textureLod(uScene, uv, 2.0).rgb;
       vec3 b3 = textureLod(uScene, uv, 3.2).rgb;
       vec3 b4 = textureLod(uScene, uv, 4.4).rgb;
       vec3 bloom = (b2*0.80 + b3*0.55 + b4*0.35);
-
-      // soft threshold-ish
       bloom = max(bloom - 0.10, 0.0);
       base += bloom * (0.65 * uBloom);
 
-      // vignette
       float v = smoothstep(0.95, 0.25, length((uv-0.5)*vec2(uRes.x/uRes.y,1.0)));
       base *= mix(0.82, 1.0, v);
 
@@ -516,7 +536,6 @@
       float grain = (g - 0.5) * 0.06 * uCine;
       base *= 1.0 + grain;
 
-      // tiny highlight sparkle (like lens grit)
       float grit = pow(hash12(uv*uRes*0.35 + uTime*9.0), 18.0) * uCine;
       base += grit * 0.10;
 
@@ -525,12 +544,10 @@
       vec2 p = (uv*2.0 - 1.0);
       p.x *= aspect;
       p = p / max(0.001, uZoom) + uPan;
-      float rs = 0.22;
-      float shadow = rs*1.14;
+      float shadow = uRs*1.14;
       float hole = smoothstep(shadow*1.01, shadow*0.98, length(p));
       base *= (1.0 - hole);
 
-      // tonemap + gamma
       vec3 outc = tonemapFilmic(base);
       outc = pow(outc, vec3(1.0/2.2));
       frag = vec4(outc, 1.0);
@@ -538,7 +555,6 @@
   `;
 
   const progBH = link(compile(gl.VERTEX_SHADER, quadVS), compile(gl.FRAGMENT_SHADER, bhFS));
-  const progP  = link(compile(gl.VERTEX_SHADER, particlesVS), compile(gl.FRAGMENT_SHADER, particlesFS));
   const progPost = link(compile(gl.VERTEX_SHADER, quadVS), compile(gl.FRAGMENT_SHADER, postFS));
 
   // Fullscreen quad
@@ -552,34 +568,53 @@
   gl.bindVertexArray(null);
 
   // Uniforms (scene)
-  const uRes = gl.getUniformLocation(progBH, 'uRes');
-  const uTime = gl.getUniformLocation(progBH, 'uTime');
-  const uZoom = gl.getUniformLocation(progBH, 'uZoom');
-  const uInc = gl.getUniformLocation(progBH, 'uInc');
-  const uSeed = gl.getUniformLocation(progBH, 'uSeed');
-  const uPan = gl.getUniformLocation(progBH, 'uPan');
-  const uSpeed = gl.getUniformLocation(progBH, 'uSpeed');
-  const uAnom = gl.getUniformLocation(progBH, 'uAnom');
-  const uCineBH = gl.getUniformLocation(progBH, 'uCine');
+  const U = {
+    res: gl.getUniformLocation(progBH, 'uRes'),
+    time: gl.getUniformLocation(progBH, 'uTime'),
+    zoom: gl.getUniformLocation(progBH, 'uZoom'),
+    inc: gl.getUniformLocation(progBH, 'uInc'),
+    seed: gl.getUniformLocation(progBH, 'uSeed'),
+    pan: gl.getUniformLocation(progBH, 'uPan'),
+    speed: gl.getUniformLocation(progBH, 'uSpeed'),
+    anom: gl.getUniformLocation(progBH, 'uAnom'),
+    cine: gl.getUniformLocation(progBH, 'uCine'),
 
-  // Uniforms (particles)
-  const uResP = gl.getUniformLocation(progP, 'uRes');
+    rs: gl.getUniformLocation(progBH, 'uRs'),
+    lens: gl.getUniformLocation(progBH, 'uLens'),
+    diskI: gl.getUniformLocation(progBH, 'uDiskI'),
+    rout: gl.getUniformLocation(progBH, 'uRoutMul'),
+    thick: gl.getUniformLocation(progBH, 'uThick'),
+    sparkAmt: gl.getUniformLocation(progBH, 'uSparkAmt'),
+    sparksOn: gl.getUniformLocation(progBH, 'uSparksOn'),
+  };
 
   // Uniforms (post)
-  const uResPost = gl.getUniformLocation(progPost, 'uRes');
-  const uTimePost = gl.getUniformLocation(progPost, 'uTime');
-  const uBloom = gl.getUniformLocation(progPost, 'uBloom');
-  const uCinePost = gl.getUniformLocation(progPost, 'uCine');
-  const uZoomPost = gl.getUniformLocation(progPost, 'uZoom');
-  const uPanPost  = gl.getUniformLocation(progPost, 'uPan');
-  const uScene = gl.getUniformLocation(progPost, 'uScene');
+  const P = {
+    res: gl.getUniformLocation(progPost, 'uRes'),
+    time: gl.getUniformLocation(progPost, 'uTime'),
+    bloom: gl.getUniformLocation(progPost, 'uBloom'),
+    cine: gl.getUniformLocation(progPost, 'uCine'),
+    zoom: gl.getUniformLocation(progPost, 'uZoom'),
+    pan: gl.getUniformLocation(progPost, 'uPan'),
+    rs: gl.getUniformLocation(progPost, 'uRs'),
+    scene: gl.getUniformLocation(progPost, 'uScene'),
+  };
 
   // ---------- Camera / controls ----------
   let zoom = parseFloat(zoomEl.value); // starts at ~1.4x for a wide, cinematic establishing view
   let inc = parseFloat(incEl.value);
   let bloomAmt = parseFloat(bloomEl.value);
   let speed = parseFloat(speedEl.value);
+
+  let rs = parseFloat(massEl.value);
+  let lens = parseFloat(lensEl.value);
+  let diskI = parseFloat(diskIEl.value);
+  let routMul = parseFloat(diskREl.value);
+  let thick = parseFloat(thickEl.value);
+  let sparkAmt = parseFloat(sparkAmtEl.value);
+
   let anomOn = anomEl.checked;
+  let sparksOn = sparksEl.checked;
   let cineOn = cineEl.checked;
 
   let panX = 0, panY = 0;
@@ -591,6 +626,13 @@
     incV.textContent = `${Math.round(inc)}°`;
     bloomV.textContent = `${bloomAmt.toFixed(2)}`;
     speedV.textContent = `${speed.toFixed(2)}`;
+
+    massV.textContent = rs.toFixed(3);
+    lensV.textContent = lens.toFixed(2);
+    diskIV.textContent = diskI.toFixed(2);
+    diskRV.textContent = routMul.toFixed(2);
+    thickV.textContent = thick.toFixed(3);
+    sparkV.textContent = sparkAmt.toFixed(2);
   }
   setLabels();
 
@@ -599,11 +641,28 @@
     inc = 68;
     bloomAmt = 1.25;
     speed = 1.0;
+
+    rs = 0.22;
+    lens = 1.05;
+    diskI = 1.0;
+    routMul = 6.9;
+    thick = 0.074;
+    sparkAmt = 1.0;
+
     panX = 0; panY = 0;
+
     zoomEl.value = zoom;
     incEl.value = inc;
     bloomEl.value = bloomAmt;
     speedEl.value = speed;
+
+    massEl.value = rs;
+    lensEl.value = lens;
+    diskIEl.value = diskI;
+    diskREl.value = routMul;
+    thickEl.value = thick;
+    sparkAmtEl.value = sparkAmt;
+
     setLabels();
   }
 
@@ -618,7 +677,16 @@
   incEl.addEventListener('input', () => { inc = parseFloat(incEl.value); setLabels(); });
   bloomEl.addEventListener('input', () => { bloomAmt = parseFloat(bloomEl.value); setLabels(); });
   speedEl.addEventListener('input', () => { speed = parseFloat(speedEl.value); setLabels(); });
+
+  massEl.addEventListener('input', () => { rs = parseFloat(massEl.value); setLabels(); });
+  lensEl.addEventListener('input', () => { lens = parseFloat(lensEl.value); setLabels(); });
+  diskIEl.addEventListener('input', () => { diskI = parseFloat(diskIEl.value); setLabels(); });
+  diskREl.addEventListener('input', () => { routMul = parseFloat(diskREl.value); setLabels(); });
+  thickEl.addEventListener('input', () => { thick = parseFloat(thickEl.value); setLabels(); });
+  sparkAmtEl.addEventListener('input', () => { sparkAmt = parseFloat(sparkAmtEl.value); setLabels(); });
+
   anomEl.addEventListener('change', () => { anomOn = anomEl.checked; });
+  sparksEl.addEventListener('change', () => { sparksOn = sparksEl.checked; });
   cineEl.addEventListener('change', () => { cineOn = cineEl.checked; });
 
   toggleUI.addEventListener('click', () => {
@@ -651,7 +719,6 @@
   let sceneTex = null, sceneFBO = null;
   let useFloat = false;
 
-  // Try to enable float color buffers (nice bloom). Fallback safely.
   const extFloat = gl.getExtension('EXT_color_buffer_float');
   const extHalfLinear = gl.getExtension('OES_texture_half_float_linear');
   useFloat = !!(extFloat && extHalfLinear);
@@ -678,8 +745,7 @@
 
     const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
     if(status !== gl.FRAMEBUFFER_COMPLETE){
-      // Fallback to RGBA8 if float target fails on this device.
-      console.warn('FBO not complete with float target. Falling back to RGBA8. Status:', status);
+      // Fallback to RGBA8
       useFloat = false;
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       gl.deleteFramebuffer(sceneFBO);
@@ -750,59 +816,20 @@
     panY += sy / zoom;
   });
 
-  // ---------- Particles (near event horizon) ----------
-  let particlesOn = partsEl.checked;
-  partsEl.addEventListener('change', () => { particlesOn = partsEl.checked; });
-
-  const RS = 0.22;
-  const PCOUNT = 1400;
-  const pState = new Float32Array(PCOUNT * 5); // r, ang, z, drift, glow
-  const pVerts = new Float32Array(PCOUNT * 4); // x,y,size,alpha
-
-  const pVAO = gl.createVertexArray();
-  const pBuf = gl.createBuffer();
-
-  gl.bindVertexArray(pVAO);
-  gl.bindBuffer(gl.ARRAY_BUFFER, pBuf);
-  gl.bufferData(gl.ARRAY_BUFFER, pVerts.byteLength, gl.DYNAMIC_DRAW);
-  gl.enableVertexAttribArray(0);
-  gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 16, 0);
-  gl.enableVertexAttribArray(1);
-  gl.vertexAttribPointer(1, 1, gl.FLOAT, false, 16, 8);
-  gl.enableVertexAttribArray(2);
-  gl.vertexAttribPointer(2, 1, gl.FLOAT, false, 16, 12);
-  gl.bindVertexArray(null);
-
-  // Seeded RNG + seed uniform value
-  let rng = Math.random;
-  let uSeedVal = 0.0;
-
-  function initParticles(){
-    for(let i=0;i<PCOUNT;i++){
-      const r = RS * lerp(1.18, 2.65, Math.pow(rng(), 0.62));
-      const ang = rng()*Math.PI*2;
-      const z = (rng()*2-1) * RS * 0.11;
-      const drift = (rng()*2-1) * 0.18;
-      const glow = lerp(0.35, 1.0, Math.pow(rng(), 1.9));
-      const o = i*5;
-      pState[o+0]=r;
-      pState[o+1]=ang;
-      pState[o+2]=z;
-      pState[o+3]=drift;
-      pState[o+4]=glow;
-    }
-  }
-
   // ---------- Seed ----------
   let seedStr = (location.hash.match(/seed=([^&]+)/)?.[1] || '').trim();
   if(!seedStr) seedStr = String(Math.floor(Math.random()*1e9));
 
+  // IMPORTANT: declare before setSeed() uses it
+  let uSeedVal = 0.0;
+
   function setSeed(str){
     seedStr = str;
     const h = xmur3(seedStr);
-    rng = sfc32(h(), h(), h(), h());
-    uSeedVal = rng()*1000;
-    initParticles();
+    const a = h();
+    const b = h();
+    // stable seed value for the shader (two mixed 32-bit hashes)
+    uSeedVal = (a/4294967296)*1000.0 + (b/4294967296)*0.001;
 
     const params = new URLSearchParams(location.hash.replace(/^#/,''));
     params.set('seed', seedStr);
@@ -811,6 +838,15 @@
 
   setSeed(seedStr);
   randomBtn.addEventListener('click', () => setSeed(String(Math.floor(Math.random()*1e9))));
+
+  // ---------- lightweight self-tests (non-throwing) ----------
+  // These are sanity checks to prevent regressions like "uSeedVal not defined".
+  (function runSelfTests(){
+    console.assert(typeof uSeedVal === 'number', 'SelfTest: uSeedVal should be a number');
+    console.assert(Number.isFinite(uSeedVal), 'SelfTest: uSeedVal should be finite');
+    console.assert(canvas && gl, 'SelfTest: canvas/gl should exist');
+    console.assert(sceneFBO !== null && sceneTex !== null, 'SelfTest: scene target should be created');
+  })();
 
   // ---------- Render loop ----------
   let tHold = now();
@@ -834,7 +870,6 @@
       fpsAcc=0; fpsN=0; fpsLast=ms;
     }
 
-    // Freeze time while paused
     const time = paused ? tHold : t;
     if(!paused) tHold = time;
 
@@ -847,141 +882,30 @@
     gl.useProgram(progBH);
     gl.bindVertexArray(quad);
 
-    gl.uniform2f(uRes, w, h);
-    gl.uniform1f(uTime, time);
-    gl.uniform1f(uZoom, zoom);
-    gl.uniform1f(uInc, inc);
-    gl.uniform1f(uSeed, uSeedVal);
-    gl.uniform2f(uPan, panX, panY);
-    gl.uniform1f(uSpeed, speed);
-    gl.uniform1f(uAnom, anomOn ? 1.0 : 0.0);
-    gl.uniform1f(uCineBH, cineOn ? 1.0 : 0.0);
+    gl.uniform2f(U.res, w, h);
+    gl.uniform1f(U.time, time);
+    gl.uniform1f(U.zoom, zoom);
+    gl.uniform1f(U.inc, inc);
+    gl.uniform1f(U.seed, uSeedVal);
+    gl.uniform2f(U.pan, panX, panY);
+    gl.uniform1f(U.speed, speed);
+    gl.uniform1f(U.anom, anomOn ? 1.0 : 0.0);
+    gl.uniform1f(U.cine, cineOn ? 1.0 : 0.0);
+
+    gl.uniform1f(U.rs, rs);
+    gl.uniform1f(U.lens, lens);
+    gl.uniform1f(U.diskI, diskI);
+    gl.uniform1f(U.rout, routMul);
+    gl.uniform1f(U.thick, thick);
+    gl.uniform1f(U.sparkAmt, sparkAmt);
+    gl.uniform1f(U.sparksOn, sparksOn ? 1.0 : 0.0);
 
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     gl.bindVertexArray(null);
 
-    // Particles (additive) inside the same texture
-    if(particlesOn){
-      const incRad = inc*Math.PI/180;
-      const cI = Math.max(0.16, Math.cos(incRad));
-
-      // Particle lensing so they "stick" to the same warped space as the disk
-      const smoothstep = (a,b,x)=>{
-        const t = clamp((x-a)/(b-a), 0, 1);
-        return t*t*(3-2*t);
-      };
-      const rot2 = (x,y,ang)=>{
-        const s = Math.sin(ang), c = Math.cos(ang);
-        return [c*x - s*y, s*x + c*y];
-      };
-
-      // Shadow in screen pixels (for hard culling: nothing enters/exits the hole)
-      const aspect = w/h;
-      const rs = RS;
-      const shadow = rs*1.14;
-      const cx = ((-panX)*zoom/aspect*0.5 + 0.5) * w;
-      const cy = (( panY)*zoom*0.5 + 0.5) * h;
-      const rPix = shadow * zoom * 0.5 * h;
-      const rPix2 = (rPix*1.02)*(rPix*1.02);
-
-      const baseOmega = 3.55 * speed;
-      const micro = anomOn ? 1.0 : 0.45;
-
-      for(let i=0;i<PCOUNT;i++){
-        const o = i*5;
-        let r = pState[o+0];
-        let a = pState[o+1];
-        let z = pState[o+2];
-        const drift = pState[o+3];
-        const glow = pState[o+4];
-
-        const omega = baseOmega * Math.pow(Math.max(RS*1.02, r), -1.5) * 0.06;
-        a += omega * dt;
-
-        r += drift * dt * RS * 0.08;
-        r = clamp(r, RS*1.18, RS*2.85);
-
-        const near = 1.0 - clamp((r - RS*1.08)/(RS*1.35), 0, 1);
-        z += (Math.sin(a*7.2 + time*4.3) * 0.0012 + (drift*0.0007)) * micro * near;
-        z = clamp(z, -RS*0.18, RS*0.18);
-
-        pState[o+0]=r;
-        pState[o+1]=a;
-        pState[o+2]=z;
-
-        const aspect = w/h;
-        let x = Math.cos(a)*r;
-        let y = Math.sin(a)*r;
-
-        // Lens warp (matches the shader's camera-space warping closely enough that particles don't "slide" on pan)
-        {
-          const rr = Math.hypot(x, y);
-          const nearH = 1.0 - smoothstep(rs*1.2, rs*4.8, rr);
-          let def = (rs*rs) / (rr*rr + 0.004);
-          def *= smoothstep(rs*0.95, rs*7.5, rr);
-          def *= (cineOn ? 1.05 : 0.82);
-          if(anomOn){
-            def *= 1.0 + (nearH*0.06*Math.sin(time*3.1 + rr*42.0 + a*1.7));
-          }
-          let txy = rot2(x, y, def);
-          x = txy[0];
-          y = txy[1];
-          const sc = 1.0 + def*0.24;
-          x *= sc; y *= sc;
-
-          const drag = 0.28*(rs/(rr + rs))*(1.0 + (anomOn ? nearH*0.75 : 0.0));
-          txy = rot2(x, y, drag);
-          x = txy[0];
-          y = txy[1];
-        }
-
-        y *= cI;
-        y += z * Math.sin(incRad);
-
-        x = (x - panX) * zoom;
-        y = (y - panY) * zoom;
-
-        const px = (x/(aspect)) * 0.5 + 0.5;
-        const py = (-y) * 0.5 + 0.5;
-
-        const X = px * w;
-        const Y = py * h;
-
-        const aNear = 1.0 - clamp((r - RS*1.05)/(RS*1.05), 0, 1);
-        const size = (1.7 + 7.6*aNear) * dpr * q;
-        let alpha = (0.10 + 0.60*aNear) * glow;
-
-        // Hard cull inside the black-hole shadow (no particles enter/exit)
-        {
-          const dxh = X - cx;
-          const dyh = Y - cy;
-          if(dxh*dxh + dyh*dyh < rPix2) alpha = 0.0;
-        }
-
-        const v = i*4;
-        pVerts[v+0]=X;
-        pVerts[v+1]=Y;
-        pVerts[v+2]=size;
-        pVerts[v+3]=alpha;
-      }
-
-      gl.useProgram(progP);
-      gl.uniform2f(uResP, w, h);
-
-      gl.bindVertexArray(pVAO);
-      gl.bindBuffer(gl.ARRAY_BUFFER, pBuf);
-      gl.bufferSubData(gl.ARRAY_BUFFER, 0, pVerts);
-
-      gl.enable(gl.BLEND);
-      gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
-      gl.drawArrays(gl.POINTS, 0, PCOUNT);
-      gl.disable(gl.BLEND);
-      gl.bindVertexArray(null);
-    }
-
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
-    // Build mip chain for bloom
+    // Mips for bloom
     gl.bindTexture(gl.TEXTURE_2D, sceneTex);
     gl.generateMipmap(gl.TEXTURE_2D);
     gl.bindTexture(gl.TEXTURE_2D, null);
@@ -994,14 +918,15 @@
 
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, sceneTex);
-    gl.uniform1i(uScene, 0);
+    gl.uniform1i(P.scene, 0);
 
-    gl.uniform2f(uResPost, w, h);
-    gl.uniform1f(uTimePost, time);
-    gl.uniform1f(uBloom, bloomAmt);
-    gl.uniform1f(uCinePost, cineOn ? 1.0 : 0.0);
-    gl.uniform1f(uZoomPost, zoom);
-    gl.uniform2f(uPanPost, panX, panY);
+    gl.uniform2f(P.res, w, h);
+    gl.uniform1f(P.time, time);
+    gl.uniform1f(P.bloom, bloomAmt);
+    gl.uniform1f(P.cine, cineOn ? 1.0 : 0.0);
+    gl.uniform1f(P.zoom, zoom);
+    gl.uniform2f(P.pan, panX, panY);
+    gl.uniform1f(P.rs, rs);
 
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     gl.bindVertexArray(null);
