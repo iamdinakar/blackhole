@@ -1,11 +1,11 @@
 # blackhole
-Cinematic golden black hole featuring customizable settings and perspectives. 
+Cinematic black hole featuring customizable settings and perspectives. 
 
 It is a single-file HTML page that renders a cinematic black hole scene in your browser (cinema-inspired).
 
 It includes:
 - A **true black** event horizon (stays black no matter what)
-- A glowing golden **accretion disk**
+- A glowing golden **accretion disk** (golden color when cinematic mode is off)
 - **Horizon sparks** that stay “attached” to the disk (don’t drift away when you move the view)
 - Subtle **cinematic post effects** (bloom + grain)
 
