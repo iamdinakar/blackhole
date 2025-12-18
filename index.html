@@ -1,0 +1,1027 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Cinematic Golden Black Hole</title>
+  <style>
+    :root{ color-scheme: dark; }
+    html,body{ height:100%; margin:0; background:#02020a; overflow:hidden;
+      font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; }
+    #c{ position:fixed; inset:0; width:100%; height:100%; display:block; }
+
+    #ui{
+      position:fixed; left:12px; top:12px; z-index:5;
+      display:flex; flex-direction:column; gap:10px;
+      padding:10px 10px 12px;
+      border-radius:14px;
+      background:rgba(7,7,16,.58);
+      border:1px solid rgba(255,255,255,.08);
+      box-shadow:0 10px 40px rgba(0,0,0,.45);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      user-select:none;
+      max-width:min(440px, calc(100vw - 24px));
+    }
+    #ui .row{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+    #ui .row.tight{ gap:6px; }
+    #ui h1{ margin:0; font-size:12px; letter-spacing:.14em; text-transform:uppercase; opacity:.88; }
+    button{
+      appearance:none; border:1px solid rgba(255,255,255,.12);
+      background:rgba(255,255,255,.06);
+      color:rgba(255,255,255,.92);
+      padding:8px 10px; border-radius:12px;
+      font-weight:600; font-size:12px;
+      cursor:pointer;
+    }
+    button:hover{ background:rgba(255,255,255,.09); }
+    button:active{ transform: translateY(1px); }
+    label{ font-size:12px; opacity:.92; display:flex; align-items:center; gap:8px; }
+    input[type="range"]{ width:180px; }
+    select{
+      border:1px solid rgba(255,255,255,.12);
+      background:rgba(255,255,255,.06);
+      color:rgba(255,255,255,.92);
+      padding:8px 10px; border-radius:12px; font-weight:600; font-size:12px;
+    }
+    .pill{ padding:6px 8px; border-radius:999px; border:1px solid rgba(255,255,255,.12);
+      background:rgba(255,255,255,.05); font-size:12px; opacity:.92; }
+    .muted{ opacity:.65; }
+    #help{ font-size:12px; opacity:.72; line-height:1.35; }
+    #toggleUI{ position:fixed; right:12px; top:12px; z-index:6; }
+    @media (max-width:480px){ input[type="range"]{ width:150px; } }
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+
+  <button id="toggleUI" class="pill">Hide UI</button>
+  <div id="ui">
+    <h1>Cinematic Golden Black Hole</h1>
+    <div class="row">
+      <button id="play">Pause</button>
+      <button id="focus">Focus horizon</button>
+      <button id="reset">Reset view</button>
+      <button id="random">New seed</button>
+      <span class="pill" id="fps">— fps</span>
+    </div>
+    <div class="row tight">
+      <label><input id="anom" type="checkbox" checked /> Horizon anomalies</label>
+      <label><input id="parts" type="checkbox" checked /> Particles</label>
+      <label><input id="cine" type="checkbox" checked /> Cinematic</label>
+    </div>
+    <div class="row">
+      <label>Zoom <input id="zoom" type="range" min="0.55" max="18" step="0.01" value="1.4" /> <span class="pill" id="zoomV">1.40×</span></label>
+    </div>
+    <div class="row">
+      <label>Inclination <input id="inc" type="range" min="0" max="82" step="1" value="68" /> <span class="pill" id="incV">68°</span></label>
+    </div>
+    <div class="row">
+      <label>Bloom <input id="bloom" type="range" min="0" max="2.4" step="0.01" value="1.25" /> <span class="pill" id="bloomV">1.25</span></label>
+    </div>
+    <div class="row">
+      <label>Speed <input id="speed" type="range" min="0" max="1.8" step="0.01" value="1" /> <span class="pill" id="speedV">1.00</span></label>
+      <label class="muted">Quality
+        <select id="q">
+          <option value="1">Ultra</option>
+          <option value="0.75" selected>High</option>
+          <option value="0.55">Balanced</option>
+          <option value="0.4">Performance</option>
+        </select>
+      </label>
+    </div>
+    <div id="help" class="muted">
+      Drag to pan · wheel/trackpad to zoom · Space = pause · H = toggle UI · F = focus
+    </div>
+  </div>
+
+<script>
+(() => {
+  'use strict';
+
+  // ---------- tiny utils ----------
+  const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+  const lerp = (a,b,t)=>a+(b-a)*t;
+  const now = ()=>performance.now()*0.001;
+
+  // Deterministic RNG
+  function xmur3(str){
+    let h=1779033703^str.length;
+    for(let i=0;i<str.length;i++){
+      h=Math.imul(h^str.charCodeAt(i),3432918353);
+      h=(h<<13)|(h>>>19);
+    }
+    return function(){
+      h=Math.imul(h^(h>>>16),2246822507);
+      h=Math.imul(h^(h>>>13),3266489909);
+      return (h^=h>>>16)>>>0;
+    };
+  }
+  function sfc32(a,b,c,d){
+    return function(){
+      a|=0; b|=0; c|=0; d|=0;
+      let t=(a+b|0)+d|0;
+      d=d+1|0;
+      a=b^(b>>>9);
+      b=c+(c<<3)|0;
+      c=(c<<21|c>>>11);
+      c=c+t|0;
+      return (t>>>0)/4294967296;
+    };
+  }
+
+  // ---------- DOM ----------
+  const canvas = document.getElementById('c');
+  const ui = document.getElementById('ui');
+  const toggleUI = document.getElementById('toggleUI');
+  const playBtn = document.getElementById('play');
+  const focusBtn = document.getElementById('focus');
+  const resetBtn = document.getElementById('reset');
+  const randomBtn = document.getElementById('random');
+  const fpsEl = document.getElementById('fps');
+
+  const zoomEl = document.getElementById('zoom');
+  const zoomV = document.getElementById('zoomV');
+  const incEl = document.getElementById('inc');
+  const incV = document.getElementById('incV');
+  const bloomEl = document.getElementById('bloom');
+  const bloomV = document.getElementById('bloomV');
+  const speedEl = document.getElementById('speed');
+  const speedV = document.getElementById('speedV');
+  const qEl = document.getElementById('q');
+  const anomEl = document.getElementById('anom');
+  const partsEl = document.getElementById('parts');
+  const cineEl = document.getElementById('cine');
+
+  let paused = false;
+
+  // ---------- WebGL2 setup ----------
+  const gl = canvas.getContext('webgl2', { antialias:false, alpha:false, depth:false, stencil:false, preserveDrawingBuffer:false });
+  if(!gl){
+    document.body.innerHTML = '<div style="padding:18px;color:#fff;font-family:system-ui">WebGL2 not supported in this browser.</div>';
+    return;
+  }
+
+  function compile(type, src){
+    const sh = gl.createShader(type);
+    gl.shaderSource(sh, src);
+    gl.compileShader(sh);
+    if(!gl.getShaderParameter(sh, gl.COMPILE_STATUS)){
+      const msg = gl.getShaderInfoLog(sh) || 'Shader compile error';
+      console.error(msg, src);
+      throw new Error(msg);
+    }
+    return sh;
+  }
+  function link(vs, fs){
+    const p = gl.createProgram();
+    gl.attachShader(p, vs);
+    gl.attachShader(p, fs);
+    gl.linkProgram(p);
+    if(!gl.getProgramParameter(p, gl.LINK_STATUS)){
+      const msg = gl.getProgramInfoLog(p) || 'Program link error';
+      console.error(msg);
+      throw new Error(msg);
+    }
+    return p;
+  }
+
+  const quadVS = `#version 300 es
+    precision highp float;
+    layout(location=0) in vec2 aPos;
+    out vec2 vUv;
+    void main(){
+      vUv = aPos*0.5 + 0.5;
+      gl_Position = vec4(aPos, 0.0, 1.0);
+    }
+  `;
+
+  // ----- Main scene (linear color; post handles tonemap/bloom) -----
+  const bhFS = `#version 300 es
+    precision highp float;
+    out vec4 frag;
+    in vec2 vUv;
+
+    uniform vec2 uRes;
+    uniform float uTime;
+    uniform float uZoom;
+    uniform float uInc;
+    uniform float uSeed;
+    uniform vec2 uPan;
+    uniform float uSpeed;
+    uniform float uAnom;
+    uniform float uCine;
+
+    float hash12(vec2 p){
+      vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+      p3 += dot(p3, p3.yzx + 33.33);
+      return fract((p3.x + p3.y) * p3.z);
+    }
+
+    float noise(vec2 p){
+      vec2 i = floor(p);
+      vec2 f = fract(p);
+      float a = hash12(i);
+      float b = hash12(i + vec2(1.0,0.0));
+      float c = hash12(i + vec2(0.0,1.0));
+      float d = hash12(i + vec2(1.0,1.0));
+      vec2 u = f*f*(3.0-2.0*f);
+      return mix(mix(a,b,u.x), mix(c,d,u.x), u.y);
+    }
+
+    float fbm(vec2 p){
+      float v = 0.0;
+      float a = 0.55;
+      mat2 m = mat2(1.7,1.2,-1.2,1.7);
+      for(int i=0;i<6;i++){
+        v += a*noise(p);
+        p = m*p;
+        a *= 0.5;
+      }
+      return v;
+    }
+
+    vec2 rot(vec2 p, float a){
+      float s = sin(a), c = cos(a);
+      return vec2(c*p.x - s*p.y, s*p.x + c*p.y);
+    }
+
+    float doppler(float beta, float vlos){
+      float denom = max(0.12, 1.0 - beta*vlos);
+      return pow(1.0/denom, 3.1);
+    }
+
+    void main(){
+      vec2 p = (vUv*2.0 - 1.0);
+      float aspect = uRes.x / uRes.y;
+      p.x *= aspect;
+
+      // camera space (pan/zoom)
+      p = p / max(0.001, uZoom) + uPan;
+
+      // Schwarzschild radius-ish (stylized)
+      float rs = 0.22;
+      float shadow = rs*1.14;
+      float photon = rs*1.58;
+
+      float t = uTime * uSpeed;
+      float inc = radians(uInc);
+
+      float r = length(p);
+      float phi = atan(p.y, p.x);
+
+      // near-horizon influence
+      float nearH = 1.0 - smoothstep(rs*1.2, rs*4.8, r);
+      float anom = uAnom * nearH;
+
+      // lensing deflection (simple, but pushed to feel more "Interstellar")
+      float def = (rs*rs) / (r*r + 0.004);
+      def *= smoothstep(rs*0.95, rs*7.5, r);
+      def *= mix(0.82, 1.05, uCine);
+
+      // micro-caustics shimmer near horizon
+      float shimmer = (fbm(p*18.0 + vec2(0.0, t*0.55) + uSeed) - 0.5);
+      def *= 1.0 + anom*(0.26*shimmer);
+
+      // warped coordinate
+      vec2 lp = rot(p, def);
+      lp *= (1.0 + def*0.24);
+
+      vec3 col = vec3(0.0);
+
+      // ----- Deep background (stars + nebula) -----
+      // Stars: keep crisp, with subtle lensing magnification.
+      vec2 sp = lp*1.75;
+      float s = 0.0;
+      for(int i=0;i<3;i++){
+        vec2 g = floor(sp*38.0 + float(i)*17.3);
+        float h = hash12(g + uSeed);
+        vec2 f = fract(sp*38.0);
+        float d = length(f - 0.5);
+        float star = smoothstep(0.060, 0.0, d) * smoothstep(0.997, 1.0, h);
+        float tw = 0.65 + 0.35*sin(t*2.0 + h*9.0);
+        s += star * tw * (0.70 + 0.40*hash12(g + 9.1));
+        sp = rot(sp, 1.15);
+      }
+
+      // Nebula: two layers for depth.
+      float neb1 = fbm(lp*1.2 + vec2(t*0.012, -t*0.010) + uSeed*0.13);
+      float neb2 = fbm(lp*2.4 + vec2(-t*0.006, t*0.008) + uSeed*0.31);
+      float neb = pow(clamp(0.55*neb1 + 0.45*neb2, 0.0, 1.0), 2.15);
+
+      vec3 nebCol = vec3(0.022,0.030,0.055)
+        + 0.18*vec3(0.18,0.26,0.85)*neb
+        + 0.08*vec3(0.75,0.22,0.10)*pow(neb2, 3.0);
+
+      col += nebCol;
+      col += vec3(1.3,1.35,1.45) * s;
+
+      // ----- Accretion disk (beaming + redshift + structure) -----
+      vec2 dp = lp;
+      float drag = 0.28 * (rs / (r + rs));
+      drag *= 1.0 + anom*0.75;
+      dp = rot(dp, drag);
+
+      float cI = max(0.16, cos(inc));
+      vec2 q = vec2(dp.x, dp.y / cI);
+      float dr = length(q);
+      float dphi = atan(q.y, q.x);
+
+      float rin = rs*1.22;
+      float rout = rs*6.9;
+
+      float thickness = 0.074 + 0.055*fbm(vec2(dphi*1.6, dr*9.4) + vec2(t*0.62, -t*0.28) + uSeed);
+      thickness *= 1.0 + anom*1.0;
+
+      float band = exp(-pow(abs(q.y) / (thickness + 1e-4), 1.30));
+      float diskMask = band;
+      diskMask *= smoothstep(rin, rin + rs*0.20, dr);
+      diskMask *= 1.0 - smoothstep(rout - rs*0.28, rout, dr);
+
+      float fil = fbm(vec2(dphi*8.6, dr*10.2) + vec2(t*1.45, -t*0.75) + uSeed*2.1);
+      float arms = sin(dphi*2.0 + t*2.35) * 0.5 + 0.5;
+      float swirl = fbm(vec2(dr*6.5, dphi*3.1) + vec2(-t*0.33, t*0.56) + uSeed*3.7);
+      float structure = 0.58*fil + 0.22*swirl + 0.20*arms;
+      structure = pow(clamp(structure, 0.0, 1.0), 1.25);
+
+      float beta = clamp(0.82 * sqrt(rin / max(dr, rin)), 0.0, 0.88);
+      float vlos = sin(dphi) * sin(inc);
+      float beam = doppler(beta, vlos);
+
+      float g = sqrt(max(0.0, 1.0 - rs / max(dr, rs*1.02))); // gravitational redshift-ish
+
+      vec3 hot  = vec3(1.95, 1.25, 0.42);
+      vec3 warm = vec3(1.25, 0.68, 0.20);
+      vec3 ember= vec3(0.52, 0.18, 0.06);
+
+      float heat = smoothstep(rout, rin, dr);
+      vec3 diskCol = mix(ember, warm, pow(heat, 0.82));
+      diskCol = mix(diskCol, hot,  pow(heat, 2.75));
+
+      // approaching side: a hint of whitening/blueing for cinematic punch
+      vec3 beamTint = mix(vec3(1.0), vec3(1.06, 1.03, 1.00), clamp(beam*0.10, 0.0, 1.0));
+      diskCol *= beamTint;
+
+      diskCol *= mix(0.52, 1.0, g);
+      diskCol *= 0.62 + 1.35*structure;
+
+      float innerGlow = exp(-pow((dr - rin) / (rs*0.115), 2.0));
+      diskCol += innerGlow * vec3(2.1, 1.35, 0.48) * (0.35 + 0.70*structure);
+
+      float flick = fbm(q*22.0 + vec2(t*2.05, -t*1.38) + uSeed);
+      diskCol *= 1.0 + anom*(0.20*(flick - 0.45));
+
+      diskCol *= diskMask * beam;
+      col += diskCol;
+
+      // "secondary" lensed disk image (suggests the famous top/bottom arc)
+      // Not physically exact, but produces the cinematic double-band feel.
+      vec2 q2 = q;
+      q2.y = -q2.y;
+      float dr2 = length(q2);
+      float dphi2 = atan(q2.y, q2.x);
+      float band2 = exp(-pow(abs(q2.y) / (thickness*0.85 + 1e-4), 1.35));
+      float disk2 = band2;
+      disk2 *= smoothstep(rin, rin + rs*0.20, dr2);
+      disk2 *= 1.0 - smoothstep(rout - rs*0.28, rout, dr2);
+      float beta2 = clamp(0.80 * sqrt(rin / max(dr2, rin)), 0.0, 0.86);
+      float vlos2 = sin(dphi2) * sin(inc);
+      float beam2 = doppler(beta2, vlos2);
+      float g2 = sqrt(max(0.0, 1.0 - rs / max(dr2, rs*1.02)));
+      float structure2 = pow(clamp(fbm(vec2(dphi2*9.1, dr2*10.0) + vec2(t*1.2, -t*0.6) + uSeed*1.7), 0.0, 1.0), 1.2);
+      vec3 diskCol2 = mix(ember, warm, pow(smoothstep(rout, rin, dr2), 0.85));
+      diskCol2 = mix(diskCol2, hot, pow(smoothstep(rout, rin, dr2), 2.6));
+      diskCol2 *= mix(0.55, 1.0, g2);
+      diskCol2 *= (0.55 + 1.10*structure2) * beam2;
+
+      float arcMix = pow(nearH, 2.0) * smoothstep(rs*1.35, rs*0.95, r);
+      col += diskCol2 * disk2 * (0.45 + 0.55*arcMix) * arcMix;
+
+      // ----- Photon ring + corona -----
+      float ring = exp(-pow((r - photon) / (rs*0.085), 2.0));
+      ring *= 0.35 + 0.65*fbm(vec2(phi*6.0, r*26.0) + vec2(t*0.95, -t*0.75) + uSeed);
+      col += ring * vec3(1.55, 1.20, 0.65) * (1.0 + 0.35*uCine);
+
+      float edge = smoothstep(shadow + rs*0.08, shadow - rs*0.02, r);
+      col *= 1.0 - 0.94*edge;
+
+      // black core
+      float core = smoothstep(rs*1.02, rs*0.98, r);
+      col = mix(col, vec3(0.0), core);
+
+      // warm corona halo
+      float halo = exp(-pow((r - shadow) / (rs*0.16), 2.0));
+      float haloFine = fbm(vec2(phi*3.0, r*14.0) + vec2(t*0.3, -t*0.22) + uSeed*0.3);
+      col += halo * vec3(0.24, 0.19, 0.14) * (0.5 + 0.5*haloFine) * (0.85 + 0.65*uCine);
+
+      // vignette (mild; post also adds)
+      float v = smoothstep(1.50, 0.22, length((vUv-0.5)*vec2(aspect,1.0)));
+      col *= 0.70 + 0.30*v;
+
+      // keep within a sane HDR-ish range (especially for RGBA8 fallback)
+      col = min(col, vec3(8.0));
+      frag = vec4(col, 1.0);
+    }
+  `;
+
+  // ----- Particles (drawn into scene FBO; bloom loves these) -----
+  const particlesVS = `#version 300 es
+    precision highp float;
+    layout(location=0) in vec2 aPos;
+    layout(location=1) in float aSize;
+    layout(location=2) in float aAlpha;
+    uniform vec2 uRes;
+    out float vAlpha;
+    void main(){
+      vAlpha = aAlpha;
+      vec2 p = aPos;
+      vec2 ndc = vec2((p.x / uRes.x) * 2.0 - 1.0, (p.y / uRes.y) * 2.0 - 1.0);
+      gl_Position = vec4(ndc, 0.0, 1.0);
+      gl_PointSize = aSize;
+    }
+  `;
+
+  const particlesFS = `#version 300 es
+    precision highp float;
+    in float vAlpha;
+    out vec4 frag;
+    void main(){
+      vec2 p = gl_PointCoord*2.0 - 1.0;
+      float d = dot(p,p);
+      float a = exp(-d*2.1) * vAlpha;
+      frag = vec4(1.0, 0.88, 0.44, a);
+    }
+  `;
+
+  // ----- Post (bloom via mip LODs + filmic tonemap + subtle CA/grain) -----
+  const postFS = `#version 300 es
+    precision highp float;
+    out vec4 frag;
+    in vec2 vUv;
+
+    uniform sampler2D uScene;
+    uniform vec2 uRes;
+    uniform float uTime;
+    uniform float uBloom;
+    uniform float uCine;
+
+    // for hard black-hole masking in post (prevents bloom/grain from lighting the core)
+    uniform float uZoom;
+    uniform vec2 uPan;
+
+    float hash12(vec2 p){
+      vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+      p3 += dot(p3, p3.yzx + 33.33);
+      return fract((p3.x + p3.y) * p3.z);
+    }
+
+    vec3 tonemapFilmic(vec3 x){
+      x = max(x, 0.0);
+      // A small cinematic shoulder; tuned to keep golds rich.
+      x = (x*(2.20*x + 0.05)) / (x*(2.20*x + 1.20) + 0.05);
+      return x;
+    }
+
+    void main(){
+      vec2 uv = vUv;
+      vec2 px = 1.0 / max(uRes, vec2(1.0));
+
+      // chromatic aberration (subtle)
+      float ca = 0.0016 * uCine;
+      vec2 d = (uv - 0.5);
+      vec2 o = d * (0.65 + 0.35*length(d)) * ca;
+
+      vec3 base;
+      base.r = texture(uScene, uv + o).r;
+      base.g = texture(uScene, uv).g;
+      base.b = texture(uScene, uv - o).b;
+
+      // bloom from lower mips (cheap and fast)
+      // (works best with float FBO, but still nice on RGBA8)
+      vec3 b2 = textureLod(uScene, uv, 2.0).rgb;
+      vec3 b3 = textureLod(uScene, uv, 3.2).rgb;
+      vec3 b4 = textureLod(uScene, uv, 4.4).rgb;
+      vec3 bloom = (b2*0.80 + b3*0.55 + b4*0.35);
+
+      // soft threshold-ish
+      bloom = max(bloom - 0.10, 0.0);
+      base += bloom * (0.65 * uBloom);
+
+      // vignette
+      float v = smoothstep(0.95, 0.25, length((uv-0.5)*vec2(uRes.x/uRes.y,1.0)));
+      base *= mix(0.82, 1.0, v);
+
+      // film grain
+      float g = hash12(uv*uRes + vec2(uTime*120.0, uTime*37.0));
+      float grain = (g - 0.5) * 0.06 * uCine;
+      base *= 1.0 + grain;
+
+      // tiny highlight sparkle (like lens grit)
+      float grit = pow(hash12(uv*uRes*0.35 + uTime*9.0), 18.0) * uCine;
+      base += grit * 0.10;
+
+      // Hard mask the black hole shadow so it stays perfectly black (even with bloom)
+      float aspect = uRes.x / uRes.y;
+      vec2 p = (uv*2.0 - 1.0);
+      p.x *= aspect;
+      p = p / max(0.001, uZoom) + uPan;
+      float rs = 0.22;
+      float shadow = rs*1.14;
+      float hole = smoothstep(shadow*1.01, shadow*0.98, length(p));
+      base *= (1.0 - hole);
+
+      // tonemap + gamma
+      vec3 outc = tonemapFilmic(base);
+      outc = pow(outc, vec3(1.0/2.2));
+      frag = vec4(outc, 1.0);
+    }
+  `;
+
+  const progBH = link(compile(gl.VERTEX_SHADER, quadVS), compile(gl.FRAGMENT_SHADER, bhFS));
+  const progP  = link(compile(gl.VERTEX_SHADER, particlesVS), compile(gl.FRAGMENT_SHADER, particlesFS));
+  const progPost = link(compile(gl.VERTEX_SHADER, quadVS), compile(gl.FRAGMENT_SHADER, postFS));
+
+  // Fullscreen quad
+  const quad = gl.createVertexArray();
+  gl.bindVertexArray(quad);
+  const qb = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, qb);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1,  -1,1, 1,-1, 1,1]), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0);
+  gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+  gl.bindVertexArray(null);
+
+  // Uniforms (scene)
+  const uRes = gl.getUniformLocation(progBH, 'uRes');
+  const uTime = gl.getUniformLocation(progBH, 'uTime');
+  const uZoom = gl.getUniformLocation(progBH, 'uZoom');
+  const uInc = gl.getUniformLocation(progBH, 'uInc');
+  const uSeed = gl.getUniformLocation(progBH, 'uSeed');
+  const uPan = gl.getUniformLocation(progBH, 'uPan');
+  const uSpeed = gl.getUniformLocation(progBH, 'uSpeed');
+  const uAnom = gl.getUniformLocation(progBH, 'uAnom');
+  const uCineBH = gl.getUniformLocation(progBH, 'uCine');
+
+  // Uniforms (particles)
+  const uResP = gl.getUniformLocation(progP, 'uRes');
+
+  // Uniforms (post)
+  const uResPost = gl.getUniformLocation(progPost, 'uRes');
+  const uTimePost = gl.getUniformLocation(progPost, 'uTime');
+  const uBloom = gl.getUniformLocation(progPost, 'uBloom');
+  const uCinePost = gl.getUniformLocation(progPost, 'uCine');
+  const uZoomPost = gl.getUniformLocation(progPost, 'uZoom');
+  const uPanPost  = gl.getUniformLocation(progPost, 'uPan');
+  const uScene = gl.getUniformLocation(progPost, 'uScene');
+
+  // ---------- Camera / controls ----------
+  let zoom = parseFloat(zoomEl.value); // starts at ~1.4x for a wide, cinematic establishing view
+  let inc = parseFloat(incEl.value);
+  let bloomAmt = parseFloat(bloomEl.value);
+  let speed = parseFloat(speedEl.value);
+  let anomOn = anomEl.checked;
+  let cineOn = cineEl.checked;
+
+  let panX = 0, panY = 0;
+  let drag = false;
+  let lastX = 0, lastY = 0;
+
+  function setLabels(){
+    zoomV.textContent = `${zoom.toFixed(2)}×`;
+    incV.textContent = `${Math.round(inc)}°`;
+    bloomV.textContent = `${bloomAmt.toFixed(2)}`;
+    speedV.textContent = `${speed.toFixed(2)}`;
+  }
+  setLabels();
+
+  function resetView(){
+    zoom = 1.4;
+    inc = 68;
+    bloomAmt = 1.25;
+    speed = 1.0;
+    panX = 0; panY = 0;
+    zoomEl.value = zoom;
+    incEl.value = inc;
+    bloomEl.value = bloomAmt;
+    speedEl.value = speed;
+    setLabels();
+  }
+
+  function focusHorizon(){
+    zoom = 10.5;
+    panX = 0; panY = 0;
+    zoomEl.value = zoom;
+    setLabels();
+  }
+
+  zoomEl.addEventListener('input', () => { zoom = parseFloat(zoomEl.value); setLabels(); });
+  incEl.addEventListener('input', () => { inc = parseFloat(incEl.value); setLabels(); });
+  bloomEl.addEventListener('input', () => { bloomAmt = parseFloat(bloomEl.value); setLabels(); });
+  speedEl.addEventListener('input', () => { speed = parseFloat(speedEl.value); setLabels(); });
+  anomEl.addEventListener('change', () => { anomOn = anomEl.checked; });
+  cineEl.addEventListener('change', () => { cineOn = cineEl.checked; });
+
+  toggleUI.addEventListener('click', () => {
+    const hidden = ui.style.display === 'none';
+    ui.style.display = hidden ? '' : 'none';
+    toggleUI.textContent = hidden ? 'Hide UI' : 'Show UI';
+  });
+
+  playBtn.addEventListener('click', () => {
+    paused = !paused;
+    playBtn.textContent = paused ? 'Play' : 'Pause';
+  });
+  resetBtn.addEventListener('click', resetView);
+  focusBtn.addEventListener('click', focusHorizon);
+
+  // Scroll / pinch zoom
+  window.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const dir = Math.sign(e.deltaY);
+    const factor = Math.exp(-dir * 0.08);
+    zoom = clamp(zoom * factor, parseFloat(zoomEl.min), parseFloat(zoomEl.max));
+    zoomEl.value = zoom;
+    setLabels();
+  }, { passive:false });
+
+  // ---------- Quality / resize ----------
+  let w=0, h=0, dpr=1, q=0.75;
+
+  // Offscreen scene target (for bloom/post)
+  let sceneTex = null, sceneFBO = null;
+  let useFloat = false;
+
+  // Try to enable float color buffers (nice bloom). Fallback safely.
+  const extFloat = gl.getExtension('EXT_color_buffer_float');
+  const extHalfLinear = gl.getExtension('OES_texture_half_float_linear');
+  useFloat = !!(extFloat && extHalfLinear);
+
+  function createSceneTarget(){
+    if(sceneTex) gl.deleteTexture(sceneTex);
+    if(sceneFBO) gl.deleteFramebuffer(sceneFBO);
+
+    sceneTex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, sceneTex);
+
+    const internalFormat = useFloat ? gl.RGBA16F : gl.RGBA8;
+    const type = useFloat ? gl.HALF_FLOAT : gl.UNSIGNED_BYTE;
+
+    gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, w, h, 0, gl.RGBA, type, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+
+    sceneFBO = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, sceneFBO);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, sceneTex, 0);
+
+    const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+    if(status !== gl.FRAMEBUFFER_COMPLETE){
+      // Fallback to RGBA8 if float target fails on this device.
+      console.warn('FBO not complete with float target. Falling back to RGBA8. Status:', status);
+      useFloat = false;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.deleteFramebuffer(sceneFBO);
+      gl.deleteTexture(sceneTex);
+      sceneTex = null; sceneFBO = null;
+
+      sceneTex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, sceneTex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+
+      sceneFBO = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, sceneFBO);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, sceneTex, 0);
+    }
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+  }
+
+  function resize(){
+    const cssW = Math.max(1, Math.floor(window.innerWidth));
+    const cssH = Math.max(1, Math.floor(window.innerHeight));
+    dpr = Math.min(2.0, window.devicePixelRatio || 1);
+    q = parseFloat(qEl.value);
+    w = Math.max(2, Math.floor(cssW * dpr * q));
+    h = Math.max(2, Math.floor(cssH * dpr * q));
+    canvas.width = w;
+    canvas.height = h;
+    canvas.style.width = cssW + 'px';
+    canvas.style.height = cssH + 'px';
+    gl.viewport(0,0,w,h);
+    createSceneTarget();
+  }
+  qEl.addEventListener('change', resize);
+  window.addEventListener('resize', resize);
+  resize();
+
+  // Drag to pan (in scene units)
+  function pointerPos(ev){
+    const rect = canvas.getBoundingClientRect();
+    return { x: (ev.clientX - rect.left), y: (ev.clientY - rect.top) };
+  }
+  canvas.addEventListener('pointerdown', (e) => {
+    drag = true;
+    canvas.setPointerCapture(e.pointerId);
+    const p = pointerPos(e);
+    lastX = p.x; lastY = p.y;
+  });
+  canvas.addEventListener('pointerup', () => { drag = false; });
+  canvas.addEventListener('pointercancel', () => { drag = false; });
+  canvas.addEventListener('pointermove', (e) => {
+    if(!drag) return;
+    if(w <= 2 || h <= 2) return;
+
+    const p = pointerPos(e);
+    const dx = p.x - lastX;
+    const dy = p.y - lastY;
+    lastX = p.x; lastY = p.y;
+
+    const aspect = w / h;
+    const sx = (dx / w) * 2.0 * aspect;
+    const sy = (dy / h) * 2.0;
+    panX -= sx / zoom;
+    panY += sy / zoom;
+  });
+
+  // ---------- Particles (near event horizon) ----------
+  let particlesOn = partsEl.checked;
+  partsEl.addEventListener('change', () => { particlesOn = partsEl.checked; });
+
+  const RS = 0.22;
+  const PCOUNT = 1400;
+  const pState = new Float32Array(PCOUNT * 5); // r, ang, z, drift, glow
+  const pVerts = new Float32Array(PCOUNT * 4); // x,y,size,alpha
+
+  const pVAO = gl.createVertexArray();
+  const pBuf = gl.createBuffer();
+
+  gl.bindVertexArray(pVAO);
+  gl.bindBuffer(gl.ARRAY_BUFFER, pBuf);
+  gl.bufferData(gl.ARRAY_BUFFER, pVerts.byteLength, gl.DYNAMIC_DRAW);
+  gl.enableVertexAttribArray(0);
+  gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 16, 0);
+  gl.enableVertexAttribArray(1);
+  gl.vertexAttribPointer(1, 1, gl.FLOAT, false, 16, 8);
+  gl.enableVertexAttribArray(2);
+  gl.vertexAttribPointer(2, 1, gl.FLOAT, false, 16, 12);
+  gl.bindVertexArray(null);
+
+  // Seeded RNG + seed uniform value
+  let rng = Math.random;
+  let uSeedVal = 0.0;
+
+  function initParticles(){
+    for(let i=0;i<PCOUNT;i++){
+      const r = RS * lerp(1.18, 2.65, Math.pow(rng(), 0.62));
+      const ang = rng()*Math.PI*2;
+      const z = (rng()*2-1) * RS * 0.11;
+      const drift = (rng()*2-1) * 0.18;
+      const glow = lerp(0.35, 1.0, Math.pow(rng(), 1.9));
+      const o = i*5;
+      pState[o+0]=r;
+      pState[o+1]=ang;
+      pState[o+2]=z;
+      pState[o+3]=drift;
+      pState[o+4]=glow;
+    }
+  }
+
+  // ---------- Seed ----------
+  let seedStr = (location.hash.match(/seed=([^&]+)/)?.[1] || '').trim();
+  if(!seedStr) seedStr = String(Math.floor(Math.random()*1e9));
+
+  function setSeed(str){
+    seedStr = str;
+    const h = xmur3(seedStr);
+    rng = sfc32(h(), h(), h(), h());
+    uSeedVal = rng()*1000;
+    initParticles();
+
+    const params = new URLSearchParams(location.hash.replace(/^#/,''));
+    params.set('seed', seedStr);
+    history.replaceState(null,'', '#'+params.toString());
+  }
+
+  setSeed(seedStr);
+  randomBtn.addEventListener('click', () => setSeed(String(Math.floor(Math.random()*1e9))));
+
+  // ---------- Render loop ----------
+  let tHold = now();
+  let last = tHold;
+  let fpsAcc=0, fpsN=0, fpsLast=performance.now();
+
+  function step(){
+    requestAnimationFrame(step);
+
+    const t = now();
+    const dt = clamp(t - last, 0.0, 0.05);
+    last = t;
+
+    // FPS
+    const ms = performance.now();
+    fpsAcc += 1.0/Math.max(1e-6, dt);
+    fpsN++;
+    if(ms - fpsLast > 420){
+      const avg = fpsAcc / Math.max(1,fpsN);
+      fpsEl.textContent = `${avg.toFixed(0)} fps`;
+      fpsAcc=0; fpsN=0; fpsLast=ms;
+    }
+
+    // Freeze time while paused
+    const time = paused ? tHold : t;
+    if(!paused) tHold = time;
+
+    // ----- PASS 1: render to scene texture -----
+    gl.bindFramebuffer(gl.FRAMEBUFFER, sceneFBO);
+    gl.viewport(0,0,w,h);
+    gl.disable(gl.BLEND);
+
+    // Scene
+    gl.useProgram(progBH);
+    gl.bindVertexArray(quad);
+
+    gl.uniform2f(uRes, w, h);
+    gl.uniform1f(uTime, time);
+    gl.uniform1f(uZoom, zoom);
+    gl.uniform1f(uInc, inc);
+    gl.uniform1f(uSeed, uSeedVal);
+    gl.uniform2f(uPan, panX, panY);
+    gl.uniform1f(uSpeed, speed);
+    gl.uniform1f(uAnom, anomOn ? 1.0 : 0.0);
+    gl.uniform1f(uCineBH, cineOn ? 1.0 : 0.0);
+
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    gl.bindVertexArray(null);
+
+    // Particles (additive) inside the same texture
+    if(particlesOn){
+      const incRad = inc*Math.PI/180;
+      const cI = Math.max(0.16, Math.cos(incRad));
+
+      // Particle lensing so they "stick" to the same warped space as the disk
+      const smoothstep = (a,b,x)=>{
+        const t = clamp((x-a)/(b-a), 0, 1);
+        return t*t*(3-2*t);
+      };
+      const rot2 = (x,y,ang)=>{
+        const s = Math.sin(ang), c = Math.cos(ang);
+        return [c*x - s*y, s*x + c*y];
+      };
+
+      // Shadow in screen pixels (for hard culling: nothing enters/exits the hole)
+      const aspect = w/h;
+      const rs = RS;
+      const shadow = rs*1.14;
+      const cx = ((-panX)*zoom/aspect*0.5 + 0.5) * w;
+      const cy = (( panY)*zoom*0.5 + 0.5) * h;
+      const rPix = shadow * zoom * 0.5 * h;
+      const rPix2 = (rPix*1.02)*(rPix*1.02);
+
+      const baseOmega = 3.55 * speed;
+      const micro = anomOn ? 1.0 : 0.45;
+
+      for(let i=0;i<PCOUNT;i++){
+        const o = i*5;
+        let r = pState[o+0];
+        let a = pState[o+1];
+        let z = pState[o+2];
+        const drift = pState[o+3];
+        const glow = pState[o+4];
+
+        const omega = baseOmega * Math.pow(Math.max(RS*1.02, r), -1.5) * 0.06;
+        a += omega * dt;
+
+        r += drift * dt * RS * 0.08;
+        r = clamp(r, RS*1.18, RS*2.85);
+
+        const near = 1.0 - clamp((r - RS*1.08)/(RS*1.35), 0, 1);
+        z += (Math.sin(a*7.2 + time*4.3) * 0.0012 + (drift*0.0007)) * micro * near;
+        z = clamp(z, -RS*0.18, RS*0.18);
+
+        pState[o+0]=r;
+        pState[o+1]=a;
+        pState[o+2]=z;
+
+        const aspect = w/h;
+        let x = Math.cos(a)*r;
+        let y = Math.sin(a)*r;
+
+        // Lens warp (matches the shader's camera-space warping closely enough that particles don't "slide" on pan)
+        {
+          const rr = Math.hypot(x, y);
+          const nearH = 1.0 - smoothstep(rs*1.2, rs*4.8, rr);
+          let def = (rs*rs) / (rr*rr + 0.004);
+          def *= smoothstep(rs*0.95, rs*7.5, rr);
+          def *= (cineOn ? 1.05 : 0.82);
+          if(anomOn){
+            def *= 1.0 + (nearH*0.06*Math.sin(time*3.1 + rr*42.0 + a*1.7));
+          }
+          let txy = rot2(x, y, def);
+          x = txy[0];
+          y = txy[1];
+          const sc = 1.0 + def*0.24;
+          x *= sc; y *= sc;
+
+          const drag = 0.28*(rs/(rr + rs))*(1.0 + (anomOn ? nearH*0.75 : 0.0));
+          txy = rot2(x, y, drag);
+          x = txy[0];
+          y = txy[1];
+        }
+
+        y *= cI;
+        y += z * Math.sin(incRad);
+
+        x = (x - panX) * zoom;
+        y = (y - panY) * zoom;
+
+        const px = (x/(aspect)) * 0.5 + 0.5;
+        const py = (-y) * 0.5 + 0.5;
+
+        const X = px * w;
+        const Y = py * h;
+
+        const aNear = 1.0 - clamp((r - RS*1.05)/(RS*1.05), 0, 1);
+        const size = (1.7 + 7.6*aNear) * dpr * q;
+        let alpha = (0.10 + 0.60*aNear) * glow;
+
+        // Hard cull inside the black-hole shadow (no particles enter/exit)
+        {
+          const dxh = X - cx;
+          const dyh = Y - cy;
+          if(dxh*dxh + dyh*dyh < rPix2) alpha = 0.0;
+        }
+
+        const v = i*4;
+        pVerts[v+0]=X;
+        pVerts[v+1]=Y;
+        pVerts[v+2]=size;
+        pVerts[v+3]=alpha;
+      }
+
+      gl.useProgram(progP);
+      gl.uniform2f(uResP, w, h);
+
+      gl.bindVertexArray(pVAO);
+      gl.bindBuffer(gl.ARRAY_BUFFER, pBuf);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, pVerts);
+
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+      gl.drawArrays(gl.POINTS, 0, PCOUNT);
+      gl.disable(gl.BLEND);
+      gl.bindVertexArray(null);
+    }
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+    // Build mip chain for bloom
+    gl.bindTexture(gl.TEXTURE_2D, sceneTex);
+    gl.generateMipmap(gl.TEXTURE_2D);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+
+    // ----- PASS 2: post to screen -----
+    gl.viewport(0,0,w,h);
+    gl.disable(gl.BLEND);
+    gl.useProgram(progPost);
+    gl.bindVertexArray(quad);
+
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, sceneTex);
+    gl.uniform1i(uScene, 0);
+
+    gl.uniform2f(uResPost, w, h);
+    gl.uniform1f(uTimePost, time);
+    gl.uniform1f(uBloom, bloomAmt);
+    gl.uniform1f(uCinePost, cineOn ? 1.0 : 0.0);
+    gl.uniform1f(uZoomPost, zoom);
+    gl.uniform2f(uPanPost, panX, panY);
+
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    gl.bindVertexArray(null);
+  }
+
+  step();
+
+  // ---------- hotkeys ----------
+  window.addEventListener('keydown', (e) => {
+    const k = e.key.toLowerCase();
+    if(e.code === 'Space'){
+      e.preventDefault();
+      paused = !paused;
+      playBtn.textContent = paused ? 'Play' : 'Pause';
+    }
+    if(k === 'r') resetView();
+    if(k === 'f') focusHorizon();
+    if(k === 'h') toggleUI.click();
+  });
+})();
+</script>
+</body>
+</html>
